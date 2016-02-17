@@ -11,4 +11,6 @@ influx_password: ""
 #How often stats are updated, in seconds
 stats_update_frequency: 60
 
+# Error logs can be sent to sentry
+# more info https://getsentry.com/
 sentry_url: ""

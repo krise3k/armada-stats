@@ -1,7 +1,7 @@
 # Armada-stats
-It is a running daemon that collects, aggregates, processes, and exports to influxdb information about running armada containers.
+It is a running daemon that collects, aggregates, processes, and exports to [influxdb](https://influxdata.com/) information about running [armada](http://armada.sh) containers.
 
-### Collected inflormations
+### Collected data
 
 	ID           ID
 	Name         name
