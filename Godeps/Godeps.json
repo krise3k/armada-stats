@@ -1,0 +1,41 @@
+{
+	"ImportPath": "github.com/krise3k/armada-stats",
+	"GoVersion": "go1.5",
+	"Deps": [
+		{
+			"ImportPath": "github.com/fatih/structs",
+			"Rev": "a924a2250d1033753512e95dce41dca3fd793ad9"
+		},
+		{
+			"ImportPath": "github.com/fsouza/go-dockerclient",
+			"Rev": "9184fe7a2d7c920b8cdd30faa64fe025f609ef20"
+		},
+		{
+			"ImportPath": "github.com/getsentry/raven-go",
+			"Rev": "1cc47a9463b90f246a0503d4c2e9a55c9459ced3"
+		},
+		{
+			"ImportPath": "github.com/influxdata/influxdb/client/v2",
+			"Comment": "v0.10.0-232-g979bd77",
+			"Rev": "979bd771f446282345e9b8f6a8c7dd8861d26464"
+		},
+		{
+			"ImportPath": "github.com/influxdata/influxdb/models",
+			"Comment": "v0.10.0-232-g979bd77",
+			"Rev": "979bd771f446282345e9b8f6a8c7dd8861d26464"
+		},
+		{
+			"ImportPath": "github.com/influxdata/influxdb/pkg/escape",
+			"Comment": "v0.10.0-232-g979bd77",
+			"Rev": "979bd771f446282345e9b8f6a8c7dd8861d26464"
+		},
+		{
+			"ImportPath": "github.com/olebedev/config",
+			"Rev": "e3edea7d68b76222b5118cc2e1cf3825e30abb80"
+		},
+		{
+			"ImportPath": "gopkg.in/yaml.v2",
+			"Rev": "f7716cbe52baa25d2e9b0d0da546fcf909fc16b4"
+		}
+	]
+}

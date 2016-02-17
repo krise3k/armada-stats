@@ -1,0 +1,14 @@
+armada_host: "localhost"
+armada_port: 8900
+
+# Metrics are stored in influxdb
+influx_host: "localhost"
+influx_port: 32776
+influx_database: "armada_metrics"
+influx_user: "armada_metrics"
+influx_password: ""
+
+#How often stats are updated, in seconds
+stats_update_frequency: 60
+
+sentry_url: ""
