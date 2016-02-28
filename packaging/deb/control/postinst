@@ -1,29 +1,30 @@
-#!/bin/sh
+#!/usr/bin/env bash
 
 set -e
 
 [ -f /etc/default/armada-stats.yml ]
 
 case "$1" in
-	configure)
-	[ -z "$ARMADA_STATS_USER" ] && ARMADA_STATS_USER="armada-stats"
-	[ -z "$ARMADA_STATS_GROUP" ] && ARMADA_STATS_GROUP="armada-stats"
-	if ! getent group "$ARMADA_STATS_GROUP" > /dev/null 2>&1 ; then
-	    addgroup --system "$ARMADA_STATS_GROUP" --quiet
-	fi
-	if ! id $ARMADA_STATS_USER > /dev/null 2>&1 ; then
-	    adduser --system --no-create-home \
-		--ingroup "$ARMADA_STATS_GROUP",docker --disabled-password --shell /bin/false \
-		"$ARMADA_STATS_USER"
-	fi
+        configure)
+        [ -z "$ARMADA_STATS_USER" ] && ARMADA_STATS_USER="armada-stats"
+        [ -z "$ARMADA_STATS_GROUP" ] && ARMADA_STATS_GROUP="armada-stats"
+        if ! getent group "$ARMADA_STATS_GROUP" > /dev/null 2>&1 ; then
+            addgroup --system "$ARMADA_STATS_GROUP" --quiet
+        fi
+        if ! id $ARMADA_STATS_USER > /dev/null 2>&1 ; then
+            adduser --system --no-create-home \
+                --ingroup "$ARMADA_STATS_GROUP" --disabled-password --shell /bin/false \
+                "$ARMADA_STATS_USER"
+                usermod -aG docker "$ARMADA_STATS_USER"
+        fi
 
-	# Set user permissions on /var/log/armada-stats
-	mkdir -p /var/log/armada-stats /var/lib/armada-stats
-	chown -R $ARMADA_STATS_USER:$ARMADA_STATS_GROUP /var/log/armada-stats
-	chmod 755 /var/log/armada-stats
+        # Set user permissions on /var/log/armada-stats
+        mkdir -p /var/log/armada-stats /var/lib/armada-stats
+        chown -R $ARMADA_STATS_USER:$ARMADA_STATS_GROUP /var/log/armada-stats
+        chmod 755 /var/log/armada-stats
 
-	# configuration files should not be modifiable by armada-stats user
-	chown -R root:$ARMADA_STATS_GROUP /etc/armada-stats/*
-	chmod 755 /etc/armada-stats
-	;;
+        # configuration files should not be modifiable by armada-stats user
+        chown -R root:$ARMADA_STATS_GROUP /etc/armada-stats/*
+        chmod 755 /etc/armada-stats
+        ;;
 esac
