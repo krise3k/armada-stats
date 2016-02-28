@@ -3,6 +3,16 @@
 	"GoVersion": "go1.5",
 	"Deps": [
 		{
+			"ImportPath": "github.com/Sirupsen/logrus",
+			"Comment": "v0.9.0-15-g219c8cb",
+			"Rev": "219c8cb75c258c552e999735be6df753ffc7afdc"
+		},
+		{
+			"ImportPath": "github.com/evalphobia/logrus_sentry",
+			"Comment": "v0.1.0-5-gd265708",
+			"Rev": "d265708c9c877d2f458e673f0af437a0529baee9"
+		},
+		{
 			"ImportPath": "github.com/fatih/structs",
 			"Rev": "a924a2250d1033753512e95dce41dca3fd793ad9"
 		},
@@ -32,6 +42,10 @@
 		{
 			"ImportPath": "github.com/olebedev/config",
 			"Rev": "e3edea7d68b76222b5118cc2e1cf3825e30abb80"
+		},
+		{
+			"ImportPath": "golang.org/x/sys/unix",
+			"Rev": "19ced1583f732e8ff9d7d84de773dc621557df99"
 		},
 		{
 			"ImportPath": "gopkg.in/yaml.v2",

@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/krise3k/armada-stats/Godeps/_workspace/src/github.com/influxdata/influxdb/pkg/escape"
+	"github.com/influxdata/influxdb/pkg/escape"
 )
 
 var (

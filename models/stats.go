@@ -1,10 +1,11 @@
 package models
 
 import (
-	"log"
 	"strings"
 	"sync"
 	"github.com/fsouza/go-dockerclient"
+	"github.com/krise3k/armada-stats/utils"
+	"github.com/Sirupsen/logrus"
 )
 
 type Container struct {
@@ -34,10 +35,9 @@ func (c *Container) Collect() {
 	var (
 		previousCPU uint64
 		previousSystem uint64
-		containerId = c.ID
 	)
 
-	log.Printf("Getting stats for container %s, ID %s", c.Name, containerId)
+	utils.GetLogger().WithFields(logrus.Fields{"containerID": c.ID, "name":c.Name}).Info("Getting stats for container")
 
 	go func() {
 		var memPercent = 0.0

@@ -1,10 +1,11 @@
 package models
 
 import (
-	"log"
 	"strings"
 	"sync"
 	"github.com/fsouza/go-dockerclient"
+	"github.com/krise3k/armada-stats/utils"
+	"github.com/Sirupsen/logrus"
 )
 
 var dockerClient *docker.Client
@@ -22,7 +23,7 @@ type Containers struct {
 
 func (containerList *Containers ) Add(armadaContainers ArmadaContainerList) {
 	for _, armadaContainer := range (armadaContainers) {
-		log.Printf("Adding container %s ID %s", armadaContainer.Name, armadaContainer.ID)
+		utils.GetLogger().WithFields(logrus.Fields{"containerID":armadaContainer.ID, "name":armadaContainer.Name}).Info("Adding container")
 
 		c := &Container{
 			ID: armadaContainer.ID,
@@ -50,7 +51,7 @@ func (containerList *Containers ) MatchWithArmada(armadaContainers ArmadaContain
 		isFound := false
 		c.Mu.Lock()
 		if c.Err != nil {
-			log.Printf("Errors getting container %s ID %s stats: %v", c.Name, c.ID, c.Err)
+			utils.GetLogger().WithFields(logrus.Fields{"containerID": c.ID, "name":c.Name}).WithError(c.Err).Error("Error getting container stats")
 			containersToRemove = append(containersToRemove, j)
 			c.Mu.Unlock()
 			continue
@@ -69,7 +70,8 @@ func (containerList *Containers ) MatchWithArmada(armadaContainers ArmadaContain
 
 		if !isFound {
 			// container not found in armada list, probably stopped
-			log.Printf("Container %s ID %s not found, removing.", c.Name, c.ID)
+			utils.GetLogger().WithFields(logrus.Fields{"containerID": c.ID, "name": c.Name}).Info("Container not found, removing")
+
 			containersToRemove = append(containersToRemove, j)
 		}
 
@@ -85,7 +87,6 @@ func (containerList *Containers ) MatchWithArmada(armadaContainers ArmadaContain
 	containerList.Mu.Unlock()
 
 	if len(armadaContainers) > 0 {
-		log.Printf("containers no: %v, list :%v",len(armadaContainers), armadaContainers )
 		containerList.Add(armadaContainers)
 	}
 }

@@ -5,34 +5,34 @@ import (
 	"fmt"
 	"github.com/krise3k/armada-stats/models"
 	"github.com/krise3k/armada-stats/utils"
-	"log"
+	"github.com/Sirupsen/logrus"
 	"time"
 )
 
 var (
 	configPath = flag.String("config", "/etc/armada-stats/armada-stats.yml", "config file location")
+	logger *logrus.Logger
 )
 
 func main() {
 	flag.Parse()
 
 	utils.InitConfig(*configPath)
-	ravenClient := utils.GetRaven()
+	logger = utils.GetLogger()
 
-	if err := GatherStats(); err != nil {
-		ravenClient.CaptureErrorAndWait(err, nil)
-		log.Println(err)
-	}
+	GatherStats()
 }
 
-func GatherStats() (err error) {
+func GatherStats() {
 	defer func() {
 		if r := recover(); r != nil {
 			var ok bool
+			var err error
 			err, ok = r.(error)
 			if !ok {
 				err = fmt.Errorf("Panic: %v", r)
 			}
+			logger.WithError(err).Fatal("Captured panic")
 		}
 	}()
 
@@ -59,7 +59,7 @@ func GatherStats() (err error) {
 		}
 
 		if len(containers.ContainerList) == 0 {
-			log.Println("ContainerList is empty, is armada running")
+			logger.Warn("ContainerList is empty, is armada running")
 		}
 
 		containers.Mu.Unlock()

@@ -3,7 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
-	"github.com/krise3k/armada-stats/Godeps/_workspace/src/github.com/getsentry/raven-go"
+	"github.com/getsentry/raven-go"
 	"log"
 	"net/http"
 	"os"

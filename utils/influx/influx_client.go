@@ -2,7 +2,6 @@ package influx
 
 import (
 	"fmt"
-	"log"
 	"time"
 	"github.com/influxdata/influxdb/client/v2"
 	"github.com/krise3k/armada-stats/utils"
@@ -33,7 +32,7 @@ func initInfluxClient() {
 		Password: password,
 	})
 	if err != nil {
-		log.Panic("Cannot connect to influx: %v", err)
+		utils.GetLogger().WithError(err).Panic("Cannot connect to influx")
 	}
 
 	defer c.Close()
@@ -41,7 +40,7 @@ func initInfluxClient() {
 	dbCreateQuery := fmt.Sprintf("CREATE DATABASE %s", db)
 	q := client.NewQuery(dbCreateQuery, "", "")
 	if response, err := c.Query(q); err == nil && response.Error() == nil {
-		log.Println(response.Results)
+		utils.GetLogger().Info(response.Results)
 	}
 
 	influxClient = c
@@ -55,7 +54,7 @@ func CreateBatchPoints() client.BatchPoints {
 	})
 
 	if err != nil {
-		log.Panic("Error creating batch : %v", err)
+		utils.GetLogger().WithError(err).Panic("Error creating batch")
 	}
 	return bp
 }
@@ -63,7 +62,7 @@ func CreateBatchPoints() client.BatchPoints {
 func CreatePoint(name string, tags map[string]string, fields map[string]interface{}) *client.Point {
 	pt, err := client.NewPoint(name, tags, fields, time.Now())
 	if err != nil {
-		log.Printf("Error sending to influx %v", err)
+		utils.GetLogger().WithError(err).Error("Error sending to influx")
 	}
 
 	return pt
@@ -73,6 +72,6 @@ func Save(points client.BatchPoints) {
 	influxClient := *GetInfluxClient()
 	err := influxClient.Write(points)
 	if err != nil {
-		log.Printf("Error sending to influx %v", err)
+		utils.GetLogger().WithError(err).Error("Error sending to influx")
 	}
 }

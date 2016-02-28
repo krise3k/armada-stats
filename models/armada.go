@@ -1,7 +1,5 @@
 package models
 import (
-	"errors"
-	"log"
 	"net/http"
 	"encoding/json"
 	"fmt"
@@ -63,8 +61,7 @@ func parseStatus(statusStr string) (Status) {
 	case "critical":
 		return critical
 	default:
-		err := errors.New("Unknown status " + statusStr)
-		log.Panicf("%s", err)
+		utils.GetLogger().Error("Unknown container status " + statusStr)
 
 		return -1
 	}
@@ -73,7 +70,7 @@ func parseStatus(statusStr string) (Status) {
 func parseContainer(apiContainer ArmadaAPIContainer) (ArmadaContainer) {
 	uptime, err := getUptime(apiContainer.StartTimestamp)
 	if err != nil {
-		log.Println(err)
+		utils.GetLogger().WithError(err).Error("Error getting container uptime")
 	}
 	container := ArmadaContainer{
 		Name:           apiContainer.Name,
@@ -110,11 +107,11 @@ func GetArmadaContainerList() (ArmadaContainerList) {
 	defer resp.Body.Close()
 
 	if err != nil {
-		panic(err)
+		utils.GetLogger().WithError(err).Panic("Cannot get container list from armada")
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(&apiContainerList); err != nil {
-		panic(err)
+		utils.GetLogger().WithError(err).Panic("Cannot decode json with container list")
 	}
 	containerList := convertToArmadaContainer(apiContainerList.Result)
 

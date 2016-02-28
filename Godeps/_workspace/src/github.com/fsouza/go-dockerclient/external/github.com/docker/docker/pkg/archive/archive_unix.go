@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"syscall"
 
-	"github.com/krise3k/armada-stats/Godeps/_workspace/src/github.com/fsouza/go-dockerclient/external/github.com/docker/docker/pkg/system"
+	"github.com/fsouza/go-dockerclient/external/github.com/docker/docker/pkg/system"
 )
 
 // fixVolumePathPrefix does platform specific processing to ensure that if

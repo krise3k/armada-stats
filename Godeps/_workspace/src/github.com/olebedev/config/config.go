@@ -13,7 +13,7 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/krise3k/armada-stats/Godeps/_workspace/src/gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v2"
 )
 
 // Config ---------------------------------------------------------------------

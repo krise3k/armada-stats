@@ -10,7 +10,7 @@ import (
 	"strings"
 	"text/scanner"
 
-	"github.com/krise3k/armada-stats/Godeps/_workspace/src/github.com/fsouza/go-dockerclient/external/github.com/Sirupsen/logrus"
+	"github.com/fsouza/go-dockerclient/external/github.com/Sirupsen/logrus"
 )
 
 // exclusion return true if the specified pattern is an exclusion
