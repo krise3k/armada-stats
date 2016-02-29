@@ -16,15 +16,16 @@ type Container struct {
 	Tags         map[string]string
 	Uptime       int64
 	Stats        struct {
-					 CPUPercentage    float64
-					 Memory           float64
-					 MemoryLimit      float64
-					 MemoryPercentage float64
-					 Swap             float64
-					 NetworkRx        float64
-					 NetworkTx        float64
-					 BlockRead        float64
-					 BlockWrite       float64
+					 CPUPercentage     float64
+					 CPUCorePercentage float64
+					 Memory            float64
+					 MemoryLimit       float64
+					 MemoryPercentage  float64
+					 Swap              float64
+					 NetworkRx         float64
+					 NetworkTx         float64
+					 BlockRead         float64
+					 BlockWrite        float64
 				 }
 	DockerClient *docker.Client
 	Mu           sync.RWMutex
@@ -42,6 +43,7 @@ func (c *Container) Collect() {
 	go func() {
 		var memPercent = 0.0
 		var cpuPercent = 0.0
+		var cpuCorePercent = 0.0
 
 		stats, err := c.getContainerStats()
 		if err != nil {
@@ -58,11 +60,12 @@ func (c *Container) Collect() {
 
 		previousCPU = stats.PreCPUStats.CPUUsage.TotalUsage
 		previousSystem = stats.PreCPUStats.SystemCPUUsage
-		cpuPercent = calculateCPUPercent(previousCPU, previousSystem, stats.CPUStats)
+		cpuPercent, cpuCorePercent = calculateCPUPercent(previousCPU, previousSystem, stats.CPUStats)
 		blkRead, blkWrite := calculateBlockIO(stats.BlkioStats.IOServiceBytesRecursive)
 
 		c.Mu.Lock()
 		c.Stats.CPUPercentage = cpuPercent
+		c.Stats.CPUCorePercentage = cpuCorePercent
 		c.Stats.Memory = memoryUsage
 		c.Stats.MemoryLimit = float64(stats.MemoryStats.Limit)
 		c.Stats.MemoryPercentage = memPercent
@@ -91,9 +94,10 @@ func (c *Container) getContainerStats() (stats *docker.Stats, err error) {
 	return stats, err
 }
 
-func calculateCPUPercent(previousCPU, previousSystem uint64, v docker.CPUStats) float64 {
+func calculateCPUPercent(previousCPU, previousSystem uint64, v docker.CPUStats) (float64, float64) {
 
 	cpuPercent := 0.0
+	cpuCorePercent := 0.0
 	// calculate the change for the cpu usage of the container in between readings
 	cpuDelta := float64(v.CPUUsage.TotalUsage) - float64(previousCPU)
 	// calculate the change for the entire system between readings
@@ -101,10 +105,11 @@ func calculateCPUPercent(previousCPU, previousSystem uint64, v docker.CPUStats) 
 
 
 	if systemDelta > 0.0 && cpuDelta > 0.0 {
-		cpuPercent = (cpuDelta / systemDelta) * 100.0
+		cpuCorePercent = (cpuDelta / systemDelta) * 100.0
+		cpuPercent = (cpuDelta / systemDelta) * float64(len(v.CPUUsage.PercpuUsage)) * 100.0
 	}
 
-	return cpuPercent
+	return cpuPercent, cpuCorePercent
 }
 
 func calculateBlockIO(blkio []docker.BlkioStatsEntry) (blkRead float64, blkWrite float64) {

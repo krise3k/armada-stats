@@ -11,15 +11,16 @@ It is a running daemon that collects, aggregates, processes, and exports to [inf
 	Uptime       uptime in seconds
 	Hostname
 
-    CPUPercentage    average CPU per core usage
-    Memory           memory usage, without cache, in bytes
-    MemoryLimit      momory limit in bytes
-    MemoryPercentage percent memory usage
-    Swap             swap usage in bytes
-    NetworkRx        total number of network Rx in bytes
-    NetworkTx        total number of network Tx in bytes
-    BlockRead        total number of BlockRead in bytes
-    BlockWrite       total number of BlockWrite in bytes
+    CPUPercentage       average CPU usage ie. if host has 16 cores, max CPU usage will be 1600
+    CPUCorePercentage   average CPU per core usage, in same case as above, max CPU per core will be 100
+    Memory              memory usage, without cache, in bytes
+    MemoryLimit         momory limit in bytes
+    MemoryPercentage    percent memory usage
+    Swap                swap usage in bytes
+    NetworkRx           total number of network Rx in bytes
+    NetworkTx           total number of network Tx in bytes
+    BlockRead           total number of BlockRead in bytes
+    BlockWrite          total number of BlockWrite in bytes
 
 
 ### How to start developing
@@ -35,6 +36,6 @@ It is a running daemon that collects, aggregates, processes, and exports to [inf
 
 To see changes after developing run `go build . && supervisorctl restart armada-stats`
 
-### How to build deb package
+### How to build package
 `./packaging/build_package.sh``
 
