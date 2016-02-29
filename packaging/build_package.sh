@@ -29,6 +29,10 @@ sleep 5
 
 PACKAGE_VERSION=$(cat VERSION)
 
-armada ssh "$CONTAINER_ID" go run build.go build pkg-deb
+armada ssh "$CONTAINER_ID" go run build.go build package
 mkdir -p "$TMP_DIR"
-docker cp "$CONTAINER_ID:/opt/armada-stats/dist/armada-stats_${PACKAGE_VERSION}_amd64.deb" "$TMP_DIR"
+
+for PACKAGE_FILE in "armada-stats_${PACKAGE_VERSION}_amd64.deb" "armada-stats-${PACKAGE_VERSION}-1.x86_64.rpm"
+do
+	docker cp "$CONTAINER_ID:/opt/armada-stats/dist/${PACKAGE_FILE}" "$TMP_DIR"
+done

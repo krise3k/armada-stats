@@ -1,6 +1,7 @@
 FROM microservice_go
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
+        rpm \
 		ruby-dev \
 	&& rm -rf /var/lib/apt/lists/*
 	
