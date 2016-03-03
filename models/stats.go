@@ -1,6 +1,7 @@
 package models
 
 import (
+	"time"
 	"strings"
 	"sync"
 	"github.com/fsouza/go-dockerclient"
@@ -81,8 +82,9 @@ func (c *Container) Collect() {
 func (c *Container) getContainerStats() (stats *docker.Stats, err error) {
 	errC := make(chan error, 1)
 	statsC := make(chan *docker.Stats, 1)
+	timeout := 10 * time.Second
 	go func() {
-		errC <- c.DockerClient.Stats(docker.StatsOptions{ID:c.ID, Stats:statsC, Stream:false})
+		errC <- c.DockerClient.Stats(docker.StatsOptions{ID:c.ID, Stats:statsC, Stream:false, Timeout: timeout})
 		close(errC)
 	}()
 	err = <-errC

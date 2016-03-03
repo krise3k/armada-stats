@@ -30,6 +30,7 @@ func initInfluxClient() {
 		Addr: addr,
 		Username: user,
 		Password: password,
+		Timeout: 10 * time.Second,
 	})
 	if err != nil {
 		utils.GetLogger().WithError(err).Panic("Cannot connect to influx")
