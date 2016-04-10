@@ -4,13 +4,21 @@ import (
 	"github.com/Sirupsen/logrus"
 	"github.com/evalphobia/logrus_sentry"
 )
+var logger *logrus.Logger
 
 func GetLogger() *logrus.Logger {
+	if logger == nil {
+		initLogger()
+	}
+
+	return logger
+}
+
+func initLogger() {
+	logger = logrus.New()
+	logger.Formatter = &logrus.TextFormatter{FullTimestamp: true}
+
 	raven := GetRaven()
-
-	log := logrus.New()
-	log.Formatter = &logrus.TextFormatter{FullTimestamp: true}
-
 	hook, err := logrus_sentry.NewWithClientSentryHook(raven, []logrus.Level{
 		logrus.PanicLevel,
 		logrus.FatalLevel,
@@ -20,7 +28,6 @@ func GetLogger() *logrus.Logger {
 	hook.StacktraceConfiguration.Enable = true
 
 	if err == nil {
-		log.Hooks.Add(hook)
+		logger.Hooks.Add(hook)
 	}
-	return log
 }
