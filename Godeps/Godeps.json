@@ -1,0 +1,55 @@
+{
+	"ImportPath": "github.com/krise3k/armada-stats",
+	"GoVersion": "go1.6",
+	"Deps": [
+		{
+			"ImportPath": "github.com/Sirupsen/logrus",
+			"Comment": "v0.10.0",
+			"Rev": "4b6ea7319e214d98c938f12692336f7ca9348d6b"
+		},
+		{
+			"ImportPath": "github.com/evalphobia/logrus_sentry",
+			"Comment": "v0.1.0-6-g339ff6c",
+			"Rev": "339ff6c84fac211e3246e0dd5aa9f6ea3abf4295"
+		},
+		{
+			"ImportPath": "github.com/fatih/structs",
+			"Rev": "73c4e3dc02a78deaba8640d5f3a8c236ec1352bf"
+		},
+		{
+			"ImportPath": "github.com/fsouza/go-dockerclient",
+			"Rev": "bf97c77db7c945cbcdbf09d56c6f87a66f54537b"
+		},
+		{
+			"ImportPath": "github.com/getsentry/raven-go",
+			"Rev": "1cc47a9463b90f246a0503d4c2e9a55c9459ced3"
+		},
+		{
+			"ImportPath": "github.com/influxdata/influxdb/client/v2",
+			"Comment": "v0.10.0-775-g23e2c40",
+			"Rev": "23e2c40923917e8e15c45bd4d843491716295986"
+		},
+		{
+			"ImportPath": "github.com/influxdata/influxdb/models",
+			"Comment": "v0.10.0-775-g23e2c40",
+			"Rev": "23e2c40923917e8e15c45bd4d843491716295986"
+		},
+		{
+			"ImportPath": "github.com/influxdata/influxdb/pkg/escape",
+			"Comment": "v0.10.0-775-g23e2c40",
+			"Rev": "23e2c40923917e8e15c45bd4d843491716295986"
+		},
+		{
+			"ImportPath": "github.com/olebedev/config",
+			"Rev": "e3edea7d68b76222b5118cc2e1cf3825e30abb80"
+		},
+		{
+			"ImportPath": "golang.org/x/sys/unix",
+			"Rev": "19ced1583f732e8ff9d7d84de773dc621557df99"
+		},
+		{
+			"ImportPath": "gopkg.in/yaml.v2",
+			"Rev": "a83829b6f1293c91addabc89d0571c246397bbf4"
+		}
+	]
+}
