@@ -85,9 +85,10 @@ func (c *Container) getContainerStats() (stats *docker.Stats, err error) {
 	timeout := 10 * time.Second
 	go func() {
 		errC <- c.DockerClient.Stats(docker.StatsOptions{ID:c.ID, Stats:statsC, Stream:false, Timeout: timeout})
-		close(errC)
 	}()
 	err = <-errC
+	defer close(errC)
+
 	if err != nil {
 		return nil, err
 	}
