@@ -19,14 +19,14 @@ import (
 )
 
 var (
-	versionRe = regexp.MustCompile(`-[0-9]{1,3}-g[0-9a-f]{5,10}`)
-	goarch string
-	goos string
-	version string = "v1"
+	versionRe             = regexp.MustCompile(`-[0-9]{1,3}-g[0-9a-f]{5,10}`)
+	goarch                string
+	goos                  string
+	version               string = "v1"
 	linuxPackageIteration string = ""
-	race bool
-	workingDir string
-	serverBinaryName string = "armada-stats"
+	race                  bool
+	workingDir            string
+	serverBinaryName      string = "armada-stats"
 )
 
 func main() {
@@ -119,7 +119,7 @@ func createPackage(options linuxPackageOptions) {
 	runPrint("mkdir", "-p", filepath.Join(workingDir, "/dist"))
 
 	// copy binary
-	runPrint("cp", "-p", filepath.Join(workingDir, "tmp/bin/" + serverBinaryName), filepath.Join(packageRoot, options.binPath))
+	runPrint("cp", "-p", filepath.Join(workingDir, "tmp/bin/"+serverBinaryName), filepath.Join(packageRoot, options.binPath))
 	// copy environment var file
 	runPrint("cp", "-p", options.defaultFileSrc, filepath.Join(packageRoot, options.etcDefaultFilePath))
 	// copy config file
@@ -156,8 +156,8 @@ type linuxPackageOptions struct {
 	etcDefaultPath     string
 	etcDefaultFilePath string
 
-	postinstSrc        string
-	defaultFileSrc     string
+	postinstSrc    string
+	defaultFileSrc string
 }
 
 func runPrint(cmd string, args ...string) {
@@ -186,7 +186,7 @@ func ensureGoPath() {
 func build(pkg string, tags []string) {
 	binary := "./tmp/bin/" + serverBinaryName
 
-	rmr(binary, binary + ".md5")
+	rmr(binary, binary+".md5")
 	args := []string{"build", "-ldflags", ldflags()}
 	if len(tags) > 0 {
 		args = append(args, "-tags", strings.Join(tags, ","))

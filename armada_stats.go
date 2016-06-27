@@ -3,15 +3,15 @@ package main
 import (
 	"flag"
 	"fmt"
+	"github.com/Sirupsen/logrus"
 	"github.com/krise3k/armada-stats/models"
 	"github.com/krise3k/armada-stats/utils"
-	"github.com/Sirupsen/logrus"
 	"time"
 )
 
 var (
 	configPath = flag.String("config", "/etc/armada-stats/armada-stats.yml", "config file location")
-	logger *logrus.Logger
+	logger     *logrus.Logger
 )
 
 func main() {
