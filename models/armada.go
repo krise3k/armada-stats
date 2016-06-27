@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 	"github.com/krise3k/armada-stats/utils"
 )
@@ -84,9 +85,16 @@ func parseContainer(apiContainer ArmadaAPIContainer) (ArmadaContainer) {
 	return container
 }
 
+func isSubService(containerName string) bool {
+	return strings.Contains(containerName, ":")
+}
+
 func convertToArmadaContainer(apiContainerList []ArmadaAPIContainer) (ArmadaContainerList) {
 	armadaContainerList := ArmadaContainerList{}
 	for _, container := range (apiContainerList) {
+		if isSubService(container.Name) {
+			continue
+		}
 		armadaContainer := parseContainer(container)
 		armadaContainerList = append(armadaContainerList, armadaContainer)
 	}
