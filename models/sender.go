@@ -4,12 +4,12 @@ import (
 	"os"
 	"github.com/fatih/structs"
 	"github.com/krise3k/armada-stats/utils/influx"
+	"github.com/krise3k/armada-stats/utils"
 )
 
 func SendToInflux(container Container) {
+	hostname := getHostname()
 	batch := influx.CreateBatchPoints()
-	hostname, _ := os.Hostname()
-
 	fields := map[string]interface{}{
 		"address": container.Address,
 		"status": int8(container.Status),
@@ -41,6 +41,11 @@ func SendToInflux(container Container) {
 	influx.Save(batch)
 }
 
+func getHostname() string {
+	if hostname, err := utils.Config.String("hostname"); err == nil {
+		return hostname
+	}
 
-
-
+	hostname, _ := os.Hostname()
+	return hostname
+}
