@@ -28,16 +28,14 @@ RUN go get github.com/tools/godep
 # install package builder
 RUN gem install fpm
 
-ADD ./ /opt/armada-stats
 #add to go workspace
 RUN mkdir -p "$GOPATH/src/github.com/krise3k"
-RUN ln -s /opt/armada-stats "$GOPATH/src/github.com/krise3k/"
-
+ADD ./ "$GOPATH/src/github.com/krise3k/armada-stats
 
 #install go dependencies
 WORKDIR "$GOPATH/src/github.com/krise3k/armada-stats"
 
-RUN cd "$GOPATH/src/github.com/krise3k/armada-stats" && godep restore && go build .
+RUN godep restore && go build .
 
 ADD ./supervisor/*.conf /etc/supervisor/conf.d/
 

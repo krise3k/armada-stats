@@ -2,7 +2,7 @@
 set -e
 set -x
 
-export MICROSERVICE_NAME=armada-stats
+MICROSERVICE_NAME=armada-stats
 TMP_DIR=tmp/build
 
 
@@ -34,5 +34,5 @@ mkdir -p "$TMP_DIR"
 
 for PACKAGE_FILE in "armada-stats_${PACKAGE_VERSION}_amd64.deb" "armada-stats-${PACKAGE_VERSION}-1.x86_64.rpm"
 do
-	docker cp "$CONTAINER_ID:/opt/armada-stats/dist/${PACKAGE_FILE}" "$TMP_DIR"
+	docker cp "$CONTAINER_ID:/go/src/github.com/krise3k/armada-stats/dist/${PACKAGE_FILE}" "$TMP_DIR"
 done
