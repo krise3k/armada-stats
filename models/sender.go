@@ -18,8 +18,8 @@ func SendToInflux(container Container) {
 
 	tags := map[string]string{
 		"id": container.ID,
-		"name": container.Name,
-		"hostname": hostname,
+		"serviceName": container.Name,
+		"host": hostname,
 	}
 
 	for key, value := range (container.Tags) {
