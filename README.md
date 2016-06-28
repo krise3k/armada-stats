@@ -4,12 +4,12 @@ It is a running daemon that collects, aggregates, processes, and exports to [inf
 ### Collected data
 
 	ID           ID
-	Name         name
+	ServiceName         name
 	Address      listen address
 	Status       container status [0 - passing, 1 - warning, 2 - critical]
 	Tags         container tags
 	Uptime       uptime in seconds
-	Hostname
+	Host
 
     CPUPercentage       average CPU usage ie. if host has 16 cores, max CPU usage will be 1600
     CPUCorePercentage   average CPU per core usage, in same case as above, max CPU per core will be 100
