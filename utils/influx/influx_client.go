@@ -20,12 +20,16 @@ func GetInfluxClient() *client.Client {
 
 func initInfluxClient() {
 	host, _ := utils.Config.String("influx_host")
-	port, _ := utils.Config.String("influx_port")
+	port, _ := utils.Config.Int("influx_port")
 	db, _ := utils.Config.String("influx_database")
 	user, _ := utils.Config.String("influx_user")
 	password, _ := utils.Config.String("influx_password")
 
-	addr := fmt.Sprintf("http://%s:%s", host, port)
+	addr := fmt.Sprintf("http://%s", host)
+	if port != 80 {
+		addr += fmt.Sprintf(":%d", port)
+	}
+
 	c, err := client.NewHTTPClient(client.HTTPConfig{
 		Addr: addr,
 		Username: user,
