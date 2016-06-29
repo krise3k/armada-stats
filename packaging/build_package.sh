@@ -22,7 +22,7 @@ cd "$(dirname "${BASH_SOURCE[0]}")/../"
 rm -fr "$TMP_DIR"
 
 #build armada-stats package
-armada build -d local
+armada build "${MICROSERVICE_NAME}" -d local
 
 CONTAINER_ID=$(armada run "${MICROSERVICE_NAME}" --env dev -d local | grep -oh 'Service is running in container [[:alnum:]]*' | awk '{print $NF}')
 sleep 5
