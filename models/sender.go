@@ -18,7 +18,7 @@ func SendToInflux(container Container) {
 
 	tags := map[string]string{
 		"id": container.ID,
-		"serviceName": container.Name,
+		"service": container.Name,
 		"host": hostname,
 	}
 
