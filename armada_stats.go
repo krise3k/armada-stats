@@ -6,6 +6,7 @@ import (
 	"github.com/Sirupsen/logrus"
 	"github.com/krise3k/armada-stats/models"
 	"github.com/krise3k/armada-stats/utils"
+	"sync"
 	"time"
 )
 
@@ -43,24 +44,25 @@ func GatherStats() {
 	armadaContainers := models.GetArmadaContainerList()
 	containers.Add(armadaContainers)
 
-	// quick pause for getting initial values
-	//@todo handle better
-	time.Sleep(stats_update_frequency)
-
 	for range time.Tick(stats_update_frequency) {
 		armadaContainers = models.GetArmadaContainerList()
-
 		containers.MatchWithArmada(armadaContainers)
-		containers.Mu.Lock()
-
-		for _, s := range containers.ContainerList {
-			go models.SendToInflux(*s)
-			go s.Collect()
-		}
 
 		if len(containers.ContainerList) == 0 {
-			logger.Warn("ContainerList is empty, is armada running")
+			logger.Warn("ContainerList is empty, check is armada running")
+			continue
 		}
+
+		containers.Mu.Lock()
+
+		waitCollectAll := &sync.WaitGroup{}
+		waitCollectAll.Add(len(containers.ContainerList))
+		for _, cl := range containers.ContainerList {
+			go cl.Collect(waitCollectAll)
+		}
+		waitCollectAll.Wait()
+
+		go models.SendMetrics(*containers)
 
 		containers.Mu.Unlock()
 	}

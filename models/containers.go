@@ -10,7 +10,6 @@ import (
 
 var dockerClient *docker.Client
 
-
 func init() {
 	endpoint := "unix:///var/run/docker.sock"
 	dockerClient, _ = docker.NewClient(endpoint)
@@ -22,6 +21,9 @@ type Containers struct {
 }
 
 func (containerList *Containers ) Add(armadaContainers ArmadaContainerList) {
+
+	waitFirstStats := &sync.WaitGroup{}
+
 	for _, armadaContainer := range (armadaContainers) {
 		utils.GetLogger().WithFields(logrus.Fields{"containerID":armadaContainer.ID, "name":armadaContainer.Name}).Info("Adding container")
 
@@ -38,9 +40,11 @@ func (containerList *Containers ) Add(armadaContainers ArmadaContainerList) {
 		containerList.ContainerList = append(containerList.ContainerList, c)
 		containerList.Mu.Unlock()
 
-		go c.Collect()
+		waitFirstStats.Add(1)
+		go c.Collect(waitFirstStats)
 	}
 
+	waitFirstStats.Wait()
 }
 
 func (containerList *Containers ) MatchWithArmada(armadaContainers ArmadaContainerList) {

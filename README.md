@@ -4,23 +4,23 @@ It is a running daemon that collects, aggregates, processes, and exports to [inf
 ### Collected data
 
 	ID           ID
-	ServiceName         name
-	Address      listen address
-	Status       container status [0 - passing, 1 - warning, 2 - critical]
-	Tags         container tags
-	Uptime       uptime in seconds
-	Host
+	service      name
+	addres       listen address
+	status       container status [0 - passing, 1 - warning, 2 - critical]
+	tags         container tags
+	uptime       uptime in seconds
+	host
 
-    CPUPercentage       average CPU usage ie. if host has 16 cores, max CPU usage will be 1600
-    CPUCorePercentage   average CPU per core usage, in same case as above, max CPU per core will be 100
-    Memory              memory usage, without cache, in bytes
-    MemoryLimit         momory limit in bytes
-    MemoryPercentage    percent memory usage
-    Swap                swap usage in bytes
-    NetworkRx           total number of network Rx in bytes
-    NetworkTx           total number of network Tx in bytes
-    BlockRead           total number of BlockRead in bytes
-    BlockWrite          total number of BlockWrite in bytes
+    cpu_percentage      average CPU usage ie. if host has 16 cores, max CPU usage will be 1600
+    cpu_core_percentage average CPU per core usage, in same case as above, max CPU per core will be 100
+    memory              memory usage, without cache, in bytes
+    memory_limit        momory limit in bytes
+    memory_percentage   percent memory usage
+    swap                swap usage in bytes
+    network_rx          total number of network Rx in bytes
+    network_tx          total number of network Tx in bytes
+    block_read          total number of BlockRead in bytes
+    block_write         total number of BlockWrite in bytes
 
 
 ### How to start developing

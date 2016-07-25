@@ -17,29 +17,34 @@ type Container struct {
 	Tags         map[string]string
 	Uptime       int64
 	Stats        struct {
-					 CPUPercentage     float64
-					 CPUCorePercentage float64
-					 Memory            float64
-					 MemoryLimit       float64
-					 MemoryPercentage  float64
-					 Swap              float64
-					 NetworkRx         float64
-					 NetworkTx         float64
-					 BlockRead         float64
-					 BlockWrite        float64
-				 }
+			     CPUPercentage     float64
+			     CPUCorePercentage float64
+			     Memory            float64
+			     MemoryLimit       float64
+			     MemoryPercentage  float64
+			     Swap              float64
+			     NetworkRx         float64
+			     NetworkTx         float64
+			     BlockRead         float64
+			     BlockWrite        float64
+		     }
 	DockerClient *docker.Client
 	Mu           sync.RWMutex
 	Err          error
 }
 
-func (c *Container) Collect() {
+func (c *Container) Collect(waitCollectAll *sync.WaitGroup) {
 	var (
 		previousCPU uint64
 		previousSystem uint64
 	)
 
 	utils.GetLogger().WithFields(logrus.Fields{"containerID": c.ID, "name":c.Name}).Info("Getting stats for container")
+
+	//always realease wait group
+	defer func() {
+		waitCollectAll.Done()
+	}()
 
 	go func() {
 		var memPercent = 0.0
@@ -78,7 +83,6 @@ func (c *Container) Collect() {
 	}()
 }
 
-
 func (c *Container) getContainerStats() (stats *docker.Stats, err error) {
 	errC := make(chan error, 1)
 	statsC := make(chan *docker.Stats, 1)
@@ -106,7 +110,6 @@ func calculateCPUPercent(previousCPU, previousSystem uint64, v docker.CPUStats) 
 	// calculate the change for the entire system between readings
 	systemDelta := float64(v.SystemCPUUsage) - float64(previousSystem)
 
-
 	if systemDelta > 0.0 && cpuDelta > 0.0 {
 		cpuCorePercent = (cpuDelta / systemDelta) * 100.0
 		cpuPercent = (cpuDelta / systemDelta) * float64(len(v.CPUUsage.PercpuUsage)) * 100.0
@@ -128,7 +131,6 @@ func calculateBlockIO(blkio []docker.BlkioStatsEntry) (blkRead float64, blkWrite
 
 	return blkRead, blkWrite
 }
-
 
 func calculateNetwork(network map[string]docker.NetworkStats) (float64, float64) {
 	var rx, tx float64

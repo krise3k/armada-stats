@@ -2,13 +2,12 @@ package influx
 
 import (
 	"fmt"
-	"time"
 	"github.com/influxdata/influxdb/client/v2"
 	"github.com/krise3k/armada-stats/utils"
+	"time"
 )
 
 var influxClient client.Client
-
 
 func GetInfluxClient() *client.Client {
 	if influxClient == nil {
@@ -31,10 +30,10 @@ func initInfluxClient() {
 	}
 
 	c, err := client.NewHTTPClient(client.HTTPConfig{
-		Addr: addr,
+		Addr:     addr,
 		Username: user,
 		Password: password,
-		Timeout: 10 * time.Second,
+		Timeout:  10 * time.Second,
 	})
 	if err != nil {
 		utils.GetLogger().WithError(err).Panic("Cannot connect to influx")
@@ -65,7 +64,7 @@ func CreateBatchPoints() client.BatchPoints {
 }
 
 func CreatePoint(name string, tags map[string]string, fields map[string]interface{}) *client.Point {
-	pt, err := client.NewPoint(name, tags, fields, time.Now())
+	pt, err := client.NewPoint(name, tags, fields, time.Now().UTC())
 	if err != nil {
 		utils.GetLogger().WithError(err).Error("Error sending to influx")
 	}
