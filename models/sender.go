@@ -11,22 +11,24 @@ import (
 
 func SendMetrics(containers Containers) {
 	hostname := getHostname()
+	cluster_name := getClusterName()
 	influxClient := influx.GetInfluxClient()
 	batch := influxClient.CreateBatchPoints()
 
 	for _, container := range containers.ContainerList {
-		point := createPoint(container, hostname)
+		point := createPoint(container, hostname, cluster_name)
 		batch.AddPoint(point)
 	}
 
 	influxClient.Save(batch)
 }
 
-func createPoint(container *Container, hostname string) *client.Point {
+func createPoint(container *Container, hostname string, cluster_name string) *client.Point {
 	tags := map[string]string{
-		"id":      container.ID,
-		"service": container.Name,
-		"host":    hostname,
+		"id":           container.ID,
+		"service":      container.Name,
+		"host":         hostname,
+		"cluster_name": cluster_name,
 	}
 
 	for key, value := range container.Tags {
@@ -55,4 +57,9 @@ func getHostname() string {
 
 	hostname, _ := os.Hostname()
 	return hostname
+}
+
+func getClusterName() string {
+	cluster_name, _ := utils.Config.String("armada_cluster_name")
+	return cluster_name
 }

@@ -1,5 +1,6 @@
 # armada_host: "localhost"
 # armada_port: 8900
+# armada_cluster_name: "default"
 
 #Overrides the system hostname
 #hostname: custom.hostname
