@@ -1,33 +1,34 @@
 package models
 
 import (
-	"time"
+	"github.com/Sirupsen/logrus"
+	"github.com/fsouza/go-dockerclient"
+	"github.com/krise3k/armada-stats/models/armada"
+	"github.com/krise3k/armada-stats/utils"
 	"strings"
 	"sync"
-	"github.com/fsouza/go-dockerclient"
-	"github.com/krise3k/armada-stats/utils"
-	"github.com/Sirupsen/logrus"
+	"time"
 )
 
 type Container struct {
-	ID           string
-	Name         string
-	Address      string
-	Status       Status
-	Tags         map[string]string
-	Uptime       int64
-	Stats        struct {
-			     CPUPercentage     float64
-			     CPUCorePercentage float64
-			     Memory            float64
-			     MemoryLimit       float64
-			     MemoryPercentage  float64
-			     Swap              float64
-			     NetworkRx         float64
-			     NetworkTx         float64
-			     BlockRead         float64
-			     BlockWrite        float64
-		     }
+	ID      string
+	Name    string
+	Address string
+	Status  armada.Status
+	Tags    map[string]string
+	Uptime  int64
+	Stats   struct {
+		CPUPercentage     float64
+		CPUCorePercentage float64
+		Memory            float64
+		MemoryLimit       float64
+		MemoryPercentage  float64
+		Swap              float64
+		NetworkRx         float64
+		NetworkTx         float64
+		BlockRead         float64
+		BlockWrite        float64
+	}
 	DockerClient *docker.Client
 	Mu           sync.RWMutex
 	Err          error
@@ -35,11 +36,11 @@ type Container struct {
 
 func (c *Container) Collect(waitCollectAll *sync.WaitGroup) {
 	var (
-		previousCPU uint64
+		previousCPU    uint64
 		previousSystem uint64
 	)
 
-	utils.GetLogger().WithFields(logrus.Fields{"containerID": c.ID, "name":c.Name}).Info("Getting stats for container")
+	utils.GetLogger().WithFields(logrus.Fields{"containerID": c.ID, "name": c.Name}).Info("Getting stats for container")
 
 	//always realease wait group
 	defer func() {
@@ -61,7 +62,7 @@ func (c *Container) Collect(waitCollectAll *sync.WaitGroup) {
 
 		memoryUsage := float64(stats.MemoryStats.Usage - stats.MemoryStats.Stats.TotalCache)
 		if stats.MemoryStats.Limit != 0 {
-			memPercent = float64(memoryUsage / float64(stats.MemoryStats.Limit)) * 100.0
+			memPercent = float64(memoryUsage/float64(stats.MemoryStats.Limit)) * 100.0
 		}
 
 		previousCPU = stats.PreCPUStats.CPUUsage.TotalUsage
@@ -88,7 +89,7 @@ func (c *Container) getContainerStats() (stats *docker.Stats, err error) {
 	statsC := make(chan *docker.Stats, 1)
 	timeout := 10 * time.Second
 	go func() {
-		errC <- c.DockerClient.Stats(docker.StatsOptions{ID:c.ID, Stats:statsC, Stream:false, Timeout: timeout})
+		errC <- c.DockerClient.Stats(docker.StatsOptions{ID: c.ID, Stats: statsC, Stream: false, Timeout: timeout})
 	}()
 	err = <-errC
 	defer close(errC)

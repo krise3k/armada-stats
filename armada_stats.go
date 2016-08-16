@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/Sirupsen/logrus"
 	"github.com/krise3k/armada-stats/models"
+	"github.com/krise3k/armada-stats/models/armada"
 	"github.com/krise3k/armada-stats/utils"
 	"sync"
 	"time"
@@ -39,13 +40,17 @@ func GatherStats() {
 
 	suf, _ := utils.Config.Int("stats_update_frequency")
 	stats_update_frequency := time.Duration(suf) * time.Second
-	containers := new(models.Containers)
 
-	armadaContainers := models.GetArmadaContainerList()
+	armadaHost, _ := utils.Config.String("armada_host")
+	armadaPort, _ := utils.Config.String("armada_port")
+	armadaClient := armada.NewArmadaClient(armadaHost, armadaPort)
+	armadaContainers := armadaClient.GetLocalContainerList()
+
+	containers := new(models.Containers)
 	containers.Add(armadaContainers)
 
 	for range time.Tick(stats_update_frequency) {
-		armadaContainers = models.GetArmadaContainerList()
+		armadaContainers = armadaClient.GetLocalContainerList()
 		containers.MatchWithArmada(armadaContainers)
 
 		if len(containers.ContainerList) == 0 {

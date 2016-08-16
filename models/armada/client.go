@@ -1,13 +1,19 @@
-package models
+package armada
+
 import (
-	"net/http"
 	"encoding/json"
 	"fmt"
+	"github.com/krise3k/armada-stats/utils"
+	"net/http"
 	"strconv"
 	"strings"
 	"time"
-	"github.com/krise3k/armada-stats/utils"
 )
+
+type ArmadaClient struct {
+	Host string
+	Port string
+}
 
 type ArmadaContainer struct {
 	ID      string
@@ -19,17 +25,17 @@ type ArmadaContainer struct {
 }
 
 type APIContainerList struct {
-	Status string `json:"status"`
+	Status string               `json:"status"`
 	Result []ArmadaAPIContainer `json:"result"`
 }
 
 type ArmadaAPIContainer struct {
-	Name           string             `json:"name"`
-	Address        string             `json:"address"`
-	ID             string             `json:"container_id"`
-	Status         string             `json:"status"`
-	Tags           map[string]string  `json:"tags"`
-	StartTimestamp string             `json:"start_timestamp"`
+	Name           string            `json:"name"`
+	Address        string            `json:"address"`
+	ID             string            `json:"container_id"`
+	Status         string            `json:"status"`
+	Tags           map[string]string `json:"tags"`
+	StartTimestamp string            `json:"start_timestamp"`
 }
 
 type Status int
@@ -40,7 +46,7 @@ const (
 	critical
 )
 
-type ArmadaContainerList [] ArmadaContainer
+type ArmadaContainerList []ArmadaContainer
 
 func getUptime(timestamp string) (int64, error) {
 	startTimestamp, err := strconv.Atoi(timestamp)
@@ -53,7 +59,7 @@ func getUptime(timestamp string) (int64, error) {
 	return int64(time.Since(started).Seconds()), nil
 }
 
-func parseStatus(statusStr string) (Status) {
+func parseStatus(statusStr string) Status {
 	switch statusStr {
 	case "passing":
 		return passing
@@ -68,18 +74,18 @@ func parseStatus(statusStr string) (Status) {
 	}
 }
 
-func parseContainer(apiContainer ArmadaAPIContainer) (ArmadaContainer) {
+func parseContainer(apiContainer ArmadaAPIContainer) ArmadaContainer {
 	uptime, err := getUptime(apiContainer.StartTimestamp)
 	if err != nil {
 		utils.GetLogger().WithError(err).Error("Error getting container uptime")
 	}
 	container := ArmadaContainer{
-		Name:           apiContainer.Name,
-		Address:        apiContainer.Address,
-		ID:             apiContainer.ID,
-		Status:         parseStatus(apiContainer.Status),
-		Tags:           apiContainer.Tags,
-		Uptime:         uptime,
+		Name:    apiContainer.Name,
+		Address: apiContainer.Address,
+		ID:      apiContainer.ID,
+		Status:  parseStatus(apiContainer.Status),
+		Tags:    apiContainer.Tags,
+		Uptime:  uptime,
 	}
 
 	return container
@@ -89,9 +95,9 @@ func isSubService(containerName string) bool {
 	return strings.Contains(containerName, ":")
 }
 
-func convertToArmadaContainer(apiContainerList []ArmadaAPIContainer) (ArmadaContainerList) {
+func convertToArmadaContainer(apiContainerList []ArmadaAPIContainer) ArmadaContainerList {
 	armadaContainerList := ArmadaContainerList{}
-	for _, container := range (apiContainerList) {
+	for _, container := range apiContainerList {
 		if isSubService(container.Name) {
 			continue
 		}
@@ -101,15 +107,28 @@ func convertToArmadaContainer(apiContainerList []ArmadaAPIContainer) (ArmadaCont
 
 	return armadaContainerList
 }
+func NewArmadaClient(host string, port string) *ArmadaClient {
+	return &ArmadaClient{
+		Host: host,
+		Port: port,
+	}
+}
 
-func GetArmadaContainerList() (ArmadaContainerList) {
+func (c *ArmadaClient) GetLocalContainerList() ArmadaContainerList {
+
+	query_string := "local=true"
+	return c.getList(query_string)
+}
+
+func (c *ArmadaClient) GetContainerListByServiceName(service_name string) ArmadaContainerList {
+
+	query_string := fmt.Sprintf("microservice_name=%s", service_name)
+	return c.getList(query_string)
+}
+
+func (c *ArmadaClient) getList(query string) ArmadaContainerList {
 	apiContainerList := new(APIContainerList)
-	host, _ := utils.Config.String("armada_host")
-	port, _ := utils.Config.String("armada_port")
-
-	query_string := "list?local=true"
-
-	url := fmt.Sprintf("http://%s:%s/%s", host, port, query_string)
+	url := fmt.Sprintf("http://%s:%s/list?%s", c.Host, c.Port, query)
 	resp, err := http.Get(url)
 
 	defer resp.Body.Close()

@@ -1,11 +1,12 @@
 package models
 
 import (
+	"github.com/Sirupsen/logrus"
+	"github.com/fsouza/go-dockerclient"
+	"github.com/krise3k/armada-stats/models/armada"
+	"github.com/krise3k/armada-stats/utils"
 	"strings"
 	"sync"
-	"github.com/fsouza/go-dockerclient"
-	"github.com/krise3k/armada-stats/utils"
-	"github.com/Sirupsen/logrus"
 )
 
 var dockerClient *docker.Client
@@ -20,20 +21,20 @@ type Containers struct {
 	ContainerList []*Container
 }
 
-func (containerList *Containers ) Add(armadaContainers ArmadaContainerList) {
+func (containerList *Containers) Add(armadaContainers armada.ArmadaContainerList) {
 
 	waitFirstStats := &sync.WaitGroup{}
 
-	for _, armadaContainer := range (armadaContainers) {
-		utils.GetLogger().WithFields(logrus.Fields{"containerID":armadaContainer.ID, "name":armadaContainer.Name}).Info("Adding container")
+	for _, armadaContainer := range armadaContainers {
+		utils.GetLogger().WithFields(logrus.Fields{"containerID": armadaContainer.ID, "name": armadaContainer.Name}).Info("Adding container")
 
 		c := &Container{
-			ID: armadaContainer.ID,
+			ID:           armadaContainer.ID,
 			DockerClient: dockerClient,
-			Name: armadaContainer.Name,
-			Address: armadaContainer.Address,
-			Tags: armadaContainer.Tags,
-			Status: armadaContainer.Status,
+			Name:         armadaContainer.Name,
+			Address:      armadaContainer.Address,
+			Tags:         armadaContainer.Tags,
+			Status:       armadaContainer.Status,
 		}
 
 		containerList.Mu.Lock()
@@ -47,7 +48,7 @@ func (containerList *Containers ) Add(armadaContainers ArmadaContainerList) {
 	waitFirstStats.Wait()
 }
 
-func (containerList *Containers ) MatchWithArmada(armadaContainers ArmadaContainerList) {
+func (containerList *Containers) MatchWithArmada(armadaContainers armada.ArmadaContainerList) {
 	containersToRemove := []int{}
 	containerList.Mu.Lock()
 
@@ -55,7 +56,7 @@ func (containerList *Containers ) MatchWithArmada(armadaContainers ArmadaContain
 		isFound := false
 		c.Mu.Lock()
 		if c.Err != nil {
-			utils.GetLogger().WithFields(logrus.Fields{"containerID": c.ID, "name":c.Name}).WithError(c.Err).Error("Error getting container stats")
+			utils.GetLogger().WithFields(logrus.Fields{"containerID": c.ID, "name": c.Name}).WithError(c.Err).Error("Error getting container stats")
 			containersToRemove = append(containersToRemove, j)
 			c.Mu.Unlock()
 			continue
@@ -66,7 +67,7 @@ func (containerList *Containers ) MatchWithArmada(armadaContainers ArmadaContain
 				c.Uptime = armadaContainer.Uptime
 				c.Status = armadaContainer.Status
 				//remove matched container from list
-				armadaContainers = append(armadaContainers[:i], armadaContainers[i + 1:]...)
+				armadaContainers = append(armadaContainers[:i], armadaContainers[i+1:]...)
 				isFound = true
 				break
 			}
@@ -85,7 +86,7 @@ func (containerList *Containers ) MatchWithArmada(armadaContainers ArmadaContain
 	//remove containers with errors
 	for j := len(containersToRemove) - 1; j >= 0; j-- {
 		i := containersToRemove[j]
-		containerList.ContainerList = append(containerList.ContainerList[:i], containerList.ContainerList[i + 1:]...)
+		containerList.ContainerList = append(containerList.ContainerList[:i], containerList.ContainerList[i+1:]...)
 	}
 
 	containerList.Mu.Unlock()
