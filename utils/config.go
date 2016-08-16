@@ -1,14 +1,13 @@
 package utils
 
 import (
+	"github.com/olebedev/config"
 	"io/ioutil"
 	"log"
-	"github.com/olebedev/config"
 )
 
 var Config *config.Config
 var defaultConfigPath = "/etc/default/armada-stats.yml"
-
 
 func InitConfig(path string) {
 	defaultConfig := readConfig(defaultConfigPath)

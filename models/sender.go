@@ -1,50 +1,51 @@
 package models
 
 import (
-	"os"
 	"github.com/fatih/structs"
+	"github.com/influxdata/influxdb/client/v2"
 	"github.com/krise3k/armada-stats/utils"
 	"github.com/krise3k/armada-stats/utils/influx"
-	"github.com/influxdata/influxdb/client/v2"
 	"github.com/serenize/snaker"
+	"os"
 )
 
 func SendMetrics(containers Containers) {
 	hostname := getHostname()
-	batch := influx.CreateBatchPoints()
+	influxClient := influx.GetInfluxClient()
+	batch := influxClient.CreateBatchPoints()
 
 	for _, container := range containers.ContainerList {
 		point := createPoint(container, hostname)
 		batch.AddPoint(point)
 	}
 
-	influx.Save(batch)
+	influxClient.Save(batch)
 }
 
 func createPoint(container *Container, hostname string) *client.Point {
 	tags := map[string]string{
-		"id": container.ID,
+		"id":      container.ID,
 		"service": container.Name,
-		"host": hostname,
+		"host":    hostname,
 	}
 
-	for key, value := range (container.Tags) {
+	for key, value := range container.Tags {
 		tags[key] = value
 	}
 
 	fields := map[string]interface{}{
 		"address": container.Address,
-		"status": int8(container.Status),
-		"uptime": container.Uptime,
+		"status":  int8(container.Status),
+		"uptime":  container.Uptime,
 	}
 
 	//add rest measurements
-	for name, value := range (structs.Map(container.Stats)) {
+	for name, value := range structs.Map(container.Stats) {
 		parsedName := snaker.CamelToSnake(name)
 		fields[parsedName] = value
 	}
 
-	return influx.CreatePoint("armada", tags, fields)
+	return influx.GetInfluxClient().CreatePoint("armada", tags, fields)
 }
 
 func getHostname() string {

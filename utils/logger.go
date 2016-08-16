@@ -4,6 +4,7 @@ import (
 	"github.com/Sirupsen/logrus"
 	"github.com/evalphobia/logrus_sentry"
 )
+
 var logger *logrus.Logger
 
 func GetLogger() *logrus.Logger {

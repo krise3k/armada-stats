@@ -5,8 +5,11 @@
 #hostname: custom.hostname
 
 # Metrics are stored in influxdb
-# influx_host: "localhost"
-# influx_port: 32776
+# Influxdb address is got from armada by service name
+# influx_service_name: influxdb
+# Armada hosts to query for influxdb service
+# armada_cluster_with_influx:
+# - localhost
 # influx_database: "armada_metrics"
 # influx_user: "armada_metrics"
 # influx_password: ""

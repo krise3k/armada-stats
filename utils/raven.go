@@ -1,8 +1,8 @@
 package utils
 
 import (
-	"log"
 	"github.com/getsentry/raven-go"
+	"log"
 )
 
 func GetRaven() *raven.Client {
