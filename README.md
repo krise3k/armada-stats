@@ -7,6 +7,7 @@ It is a running daemon that collects, aggregates, processes, and exports to [inf
 	service      name
 	addres       listen address
 	status       container status [0 - passing, 1 - warning, 2 - critical]
+	status_name  name of service status it's mapped to status
 	tags         container tags
 	uptime       uptime in seconds
 	host

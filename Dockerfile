@@ -1,5 +1,5 @@
 FROM microservice
-
+ENV LANG='en_US.UTF-8' LANGUAGE='en_US:en' LC_ALL='en_US.UTF-8'
 RUN apt-get update && apt-get install -y --no-install-recommends \
 		g++ \
 		gcc \
@@ -35,7 +35,7 @@ ADD ./ "$GOPATH/src/github.com/krise3k/armada-stats
 #install go dependencies
 WORKDIR "$GOPATH/src/github.com/krise3k/armada-stats"
 
-RUN godep restore && go build .
+RUN go build .
 
 ADD ./supervisor/*.conf /etc/supervisor/conf.d/
 
