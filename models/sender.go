@@ -36,9 +36,10 @@ func createPoint(container *Container, hostname string, cluster_name string) *cl
 	}
 
 	fields := map[string]interface{}{
-		"address": container.Address,
-		"status":  int8(container.Status),
-		"uptime":  container.Uptime,
+		"address":     container.Address,
+		"status":      int8(container.Status),
+		"status_name": container.StatusName,
+		"uptime":      container.Uptime,
 	}
 
 	//add rest measurements

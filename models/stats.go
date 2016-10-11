@@ -11,13 +11,14 @@ import (
 )
 
 type Container struct {
-	ID      string
-	Name    string
-	Address string
-	Status  armada.Status
-	Tags    map[string]string
-	Uptime  int64
-	Stats   struct {
+	ID         string
+	Name       string
+	Address    string
+	Status     armada.Status
+	StatusName string
+	Tags       map[string]string
+	Uptime     int64
+	Stats      struct {
 		CPUPercentage     float64
 		CPUCorePercentage float64
 		Memory            float64
