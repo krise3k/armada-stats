@@ -86,9 +86,11 @@ func createDebPackages() {
 		configDir:      "/etc/armada-stats",
 		configFilePath: "/etc/armada-stats/armada-stats.yml",
 
-		etcDefaultPath:     "/etc/default",
-		etcDefaultFilePath: "/etc/default/armada-stats.yml",
+		etcDefaultPath:         "/etc/default",
+		etcDefaultFilePath:     "/etc/default/armada-stats.yml",
+		systemdServiceFilePath: "/usr/lib/systemd/system/armada-stats.service",
 
+		systemdFileSrc: "packaging/systemd/armada-stats.service",
 		postinstSrc:    "packaging/deb/control/postinst",
 		defaultFileSrc: "conf/defaults.yml",
 	})
@@ -101,9 +103,11 @@ func createRpmPackages() {
 		configDir:      "/etc/armada-stats",
 		configFilePath: "/etc/armada-stats/armada-stats.yml",
 
-		etcDefaultPath:     "/etc/default",
-		etcDefaultFilePath: "/etc/default/armada-stats.yml",
+		etcDefaultPath:         "/etc/default",
+		etcDefaultFilePath:     "/etc/default/armada-stats.yml",
+		systemdServiceFilePath: "/usr/lib/systemd/system/armada-stats.service",
 
+		systemdFileSrc: "packaging/systemd/armada-stats.service",
 		postinstSrc:    "packaging/rpm/control/postinst",
 		defaultFileSrc: "conf/defaults.yml",
 	})
@@ -115,6 +119,7 @@ func createPackage(options linuxPackageOptions) {
 	runPrint("mkdir", "-p", filepath.Join(packageRoot, options.configDir))
 	runPrint("mkdir", "-p", filepath.Join(packageRoot, options.etcDefaultPath))
 	runPrint("mkdir", "-p", filepath.Join(packageRoot, "/usr/local/bin"))
+	runPrint("mkdir", "-p", filepath.Join(packageRoot, "/usr/lib/systemd/system"))
 	//create package directory
 	runPrint("mkdir", "-p", filepath.Join(workingDir, "/dist"))
 
@@ -124,6 +129,8 @@ func createPackage(options linuxPackageOptions) {
 	runPrint("cp", "-p", options.defaultFileSrc, filepath.Join(packageRoot, options.etcDefaultFilePath))
 	// copy config file
 	runPrint("cp", "conf/armada-stats.yml", filepath.Join(packageRoot, options.configFilePath))
+	// copy systemd file
+	runPrint("cp", "-p", options.systemdFileSrc, filepath.Join(packageRoot, options.systemdServiceFilePath))
 	args := []string{
 		"-s", "dir",
 		"--description", "armada-stats",
@@ -132,6 +139,7 @@ func createPackage(options linuxPackageOptions) {
 		"--maintainer", "krise3k@github.com",
 		"--config-files", options.configFilePath,
 		"--config-files", options.etcDefaultFilePath,
+		"--config-files", options.systemdServiceFilePath,
 		"--after-install", options.postinstSrc,
 		"--name", "armada-stats",
 		"--version", version,
@@ -149,13 +157,15 @@ func createPackage(options linuxPackageOptions) {
 }
 
 type linuxPackageOptions struct {
-	packageType        string
-	binPath            string
-	configDir          string
-	configFilePath     string
-	etcDefaultPath     string
-	etcDefaultFilePath string
+	packageType            string
+	binPath                string
+	configDir              string
+	configFilePath         string
+	etcDefaultPath         string
+	etcDefaultFilePath     string
+	systemdServiceFilePath string
 
+	systemdFileSrc string
 	postinstSrc    string
 	defaultFileSrc string
 }
