@@ -66,6 +66,7 @@ func (containerList *Containers) MatchWithArmada(armadaContainers armada.ArmadaC
 			if strings.HasPrefix(c.ID, armadaContainer.ID) {
 				c.Uptime = armadaContainer.Uptime
 				c.Status = armadaContainer.Status
+				c.StatusName = armadaContainer.StatusName
 				//remove matched container from list
 				armadaContainers = append(armadaContainers[:i], armadaContainers[i+1:]...)
 				isFound = true

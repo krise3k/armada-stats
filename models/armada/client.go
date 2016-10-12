@@ -16,12 +16,13 @@ type ArmadaClient struct {
 }
 
 type ArmadaContainer struct {
-	ID      string
-	Name    string
-	Address string
-	Status  Status
-	Tags    map[string]string
-	Uptime  int64
+	ID         string
+	Name       string
+	Address    string
+	Status     Status
+	StatusName string
+	Tags       map[string]string
+	Uptime     int64
 }
 
 type APIContainerList struct {
@@ -61,17 +62,18 @@ func getUptime(timestamp string) (int64, error) {
 
 func parseStatus(statusStr string) Status {
 	switch statusStr {
-	case "passing":
+	case "passing", "recovering":
 		return passing
 	case "warning":
 		return warning
-	case "critical":
+	case "crashed", "critical", "not-recovered":
 		return critical
 	default:
 		utils.GetLogger().Error("Unknown container status " + statusStr)
 
 		return -1
 	}
+
 }
 
 func parseContainer(apiContainer ArmadaAPIContainer) ArmadaContainer {
@@ -80,12 +82,13 @@ func parseContainer(apiContainer ArmadaAPIContainer) ArmadaContainer {
 		utils.GetLogger().WithError(err).Error("Error getting container uptime")
 	}
 	container := ArmadaContainer{
-		Name:    apiContainer.Name,
-		Address: apiContainer.Address,
-		ID:      apiContainer.ID,
-		Status:  parseStatus(apiContainer.Status),
-		Tags:    apiContainer.Tags,
-		Uptime:  uptime,
+		Name:       apiContainer.Name,
+		Address:    apiContainer.Address,
+		ID:         apiContainer.ID,
+		Status:     parseStatus(apiContainer.Status),
+		StatusName: apiContainer.Status,
+		Tags:       apiContainer.Tags,
+		Uptime:     uptime,
 	}
 
 	return container
