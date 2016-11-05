@@ -51,6 +51,10 @@ func getInfluxAddr() (string, int) {
 		}
 
 		addr := strings.SplitN(influxServices[0].Address, ":", 2)
+		if len(addr) != 2 {
+			continue
+		}
+
 		host := addr[0]
 		port, _ := strconv.Atoi(addr[1])
 		return host, port
