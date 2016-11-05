@@ -1,7 +1,7 @@
 {
 	"ImportPath": "github.com/krise3k/armada-stats",
 	"GoVersion": "go1.6",
-	"GodepVersion": "v62",
+	"GodepVersion": "v75",
 	"Deps": [
 		{
 			"ImportPath": "github.com/Sirupsen/logrus",
@@ -93,7 +93,7 @@
 		},
 		{
 			"ImportPath": "github.com/getsentry/raven-go",
-			"Rev": "dffeb57df75d6a911f00232155194e43d79d38d7"
+			"Rev": "b8684db99b339af19aa6f067df3be9de6e995f89"
 		},
 		{
 			"ImportPath": "github.com/hashicorp/go-cleanhttp",
@@ -101,18 +101,18 @@
 		},
 		{
 			"ImportPath": "github.com/influxdata/influxdb/client/v2",
-			"Comment": "v1.0.0-beta2-21-g9fb1c51",
-			"Rev": "9fb1c514e45675bdba763e599a0853301052cebf"
+			"Comment": "v1.1.0-rc1-4-g4b85371",
+			"Rev": "4b85371a71d4382a5e53902d2aac997a0b0733bf"
 		},
 		{
 			"ImportPath": "github.com/influxdata/influxdb/models",
-			"Comment": "v1.0.0-beta2-21-g9fb1c51",
-			"Rev": "9fb1c514e45675bdba763e599a0853301052cebf"
+			"Comment": "v1.1.0-rc1-4-g4b85371",
+			"Rev": "4b85371a71d4382a5e53902d2aac997a0b0733bf"
 		},
 		{
 			"ImportPath": "github.com/influxdata/influxdb/pkg/escape",
-			"Comment": "v1.0.0-beta2-21-g9fb1c51",
-			"Rev": "9fb1c514e45675bdba763e599a0853301052cebf"
+			"Comment": "v1.1.0-rc1-4-g4b85371",
+			"Rev": "4b85371a71d4382a5e53902d2aac997a0b0733bf"
 		},
 		{
 			"ImportPath": "github.com/olebedev/config",
@@ -138,6 +138,11 @@
 		{
 			"ImportPath": "gopkg.in/yaml.v2",
 			"Rev": "a83829b6f1293c91addabc89d0571c246397bbf4"
+		},
+		{
+			"ImportPath": "github.com/certifi/gocertifi",
+			"Comment": "2016.09.26",
+			"Rev": "a61bf5eafa3aee233ec8043e9da052447e5463dd"
 		}
 	]
 }
