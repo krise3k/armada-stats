@@ -66,7 +66,7 @@ func parseStatus(statusStr string) Status {
 		return passing
 	case "warning":
 		return warning
-	case "crashed", "critical", "not-recovered":
+	case "crashed", "critical", "not-recovered", "started":
 		return critical
 	default:
 		utils.GetLogger().Error("Unknown container status " + statusStr)
@@ -77,10 +77,7 @@ func parseStatus(statusStr string) Status {
 }
 
 func parseContainer(apiContainer ArmadaAPIContainer) ArmadaContainer {
-	uptime, err := getUptime(apiContainer.StartTimestamp)
-	if err != nil {
-		utils.GetLogger().WithError(err).Error("Error getting container uptime")
-	}
+	uptime, _ := getUptime(apiContainer.StartTimestamp)
 	container := ArmadaContainer{
 		Name:       apiContainer.Name,
 		Address:    apiContainer.Address,
