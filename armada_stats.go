@@ -7,19 +7,27 @@ import (
 	"github.com/krise3k/armada-stats/models"
 	"github.com/krise3k/armada-stats/models/armada"
 	"github.com/krise3k/armada-stats/utils"
+	"os"
 	"sync"
 	"time"
 )
 
 var (
 	configPath = flag.String("config", "/etc/armada-stats/armada-stats.yml", "config file location")
+	v          = flag.Bool("v", false, "prints current version and exits")
 	logger     *logrus.Logger
+	version    string
 )
 
 func main() {
-	flag.Parse()
 
+	flag.Parse()
+	if *v {
+		fmt.Printf("Version %s \n", version)
+		os.Exit(0)
+	}
 	utils.InitConfig(*configPath)
+	utils.Config.Set("version", version)
 	logger = utils.GetLogger()
 
 	GatherStats()

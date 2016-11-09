@@ -7,7 +7,6 @@ import (
 	"crypto/md5"
 	"flag"
 	"fmt"
-	"github.com/krise3k/armada-stats/utils"
 	"io"
 	"io/ioutil"
 	"log"
@@ -36,7 +35,7 @@ func main() {
 
 	ensureGoPath()
 	workingDir, _ = os.Getwd()
-	version = utils.ReadVersion()
+	version = readVersion()
 	log.Printf("Version: %s, Package Iteration: %s\n", version, linuxPackageIteration)
 
 	flag.StringVar(&goarch, "goarch", runtime.GOARCH, "GOARCH")
@@ -240,6 +239,15 @@ func setBuildEnv() {
 	}
 	os.Setenv("GOPATH", fmt.Sprintf("%s%c%s", filepath.Join(wd, "Godeps", "_workspace"), os.PathListSeparator, os.Getenv("GOPATH")))
 	log.Println("GOPATH=" + os.Getenv("GOPATH"))
+}
+
+func readVersion() string {
+	version, err := ioutil.ReadFile(filepath.Join(workingDir, "VERSION"))
+	if err != nil {
+		log.Println("Warning: can't determine current version:", err)
+	}
+
+	return string(version)
 }
 
 func md5File(file string) error {

@@ -11,6 +11,9 @@ func GetRaven() *raven.Client {
 	if err != nil {
 		log.Printf("Can't initialize raven %s", err)
 	}
-	client.SetRelease(ReadVersion())
+
+	version, _ := Config.String("version")
+	client.SetRelease(version)
+
 	return client
 }
