@@ -29,7 +29,7 @@ It is a running daemon that collects, aggregates, processes, and exports to [inf
 - Log into it `vagrant ssh`
 - Run influx `armada run influxdb -r armada-stats-influxdb -v '<local dir>:/var/influxdb'`
 - Create a *custom.yml* in the conf directory to override default configuration options. Especially *armada_host*
-- Build container `cd /projects/grafana && armada build`
+- Build container `cd /projects/armada-stats && armada build`
 - Run container `armada run --env dev -v /var/run/docker.sock:/var/run/docker.sock`
 - Log into `armada ssh`
 - Build armada-stats `go build .`
