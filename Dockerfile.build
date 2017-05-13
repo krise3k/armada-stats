@@ -1,0 +1,24 @@
+FROM golang:1.8-stretch
+RUN apt-get update && apt-get install -y --no-install-recommends \
+		g++ \
+		gcc \
+		git \
+		libc6-dev \
+		make \
+		rpm \
+		ruby-dev \
+	&& rm -rf /var/lib/apt/lists/*
+
+
+# install package builder
+RUN gem install fpm
+
+#add to go workspace
+RUN mkdir -p "$GOPATH/src/github.com/krise3k"
+
+ENV PROJECT_SOURCE="$GOPATH/src/github.com/krise3k/armada-stats"
+WORKDIR "$PROJECT_SOURCE"
+
+VOLUME ["$PROJECT_SOURCE"]
+
+CMD go run build.go build package
