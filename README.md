@@ -2,7 +2,7 @@
 It is a running daemon that collects, aggregates, processes, and exports to [influxdb](https://influxdata.com/) information about running [armada](http://armada.sh) containers.
 
 ### Collected data
-
+#### service
 	ID           ID
 	service      name
 	addres       listen address
@@ -23,7 +23,9 @@ It is a running daemon that collects, aggregates, processes, and exports to [inf
     block_read          total number of BlockRead in bytes
     block_write         total number of BlockWrite in bytes
 
-
+#### ship
+- total number of services grouped by `status_name`
+    
 ### How to start developing
 - Start vagrant `vagrant up`
 - Log into it `vagrant ssh`
@@ -38,5 +40,5 @@ It is a running daemon that collects, aggregates, processes, and exports to [inf
 To see changes after developing run `go build . && supervisorctl restart armada-stats`
 
 ### How to build package
-`./packaging/build_package.sh``
+`./packaging/build_package.sh`
 

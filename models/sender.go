@@ -9,18 +9,36 @@ import (
 	"os"
 )
 
+type ShipSummaryCounter map[string]int16
+
 func SendMetrics(containers Containers) {
 	hostname := getHostname()
 	cluster_name := getClusterName()
 	influxClient := influx.GetInfluxClient()
 	batch := influxClient.CreateBatchPoints()
+	summary_by_status := ShipSummaryCounter{}
 
 	for _, container := range containers.ContainerList {
+		if len(container.StatusName) > 0 {
+			summary_by_status = updateShipSummary(summary_by_status, container)
+		}
 		point := createPoint(container, hostname, cluster_name)
 		batch.AddPoint(point)
 	}
 
+	point := createSummary(summary_by_status, hostname, cluster_name)
+	batch.AddPoint(point)
+
 	influxClient.Save(batch)
+}
+func updateShipSummary(summary_by_status ShipSummaryCounter, container *Container) ShipSummaryCounter {
+	if _, ok := summary_by_status[container.StatusName]; ok {
+		summary_by_status[container.StatusName] += 1
+	} else {
+		summary_by_status[container.StatusName] = 1
+	}
+	return summary_by_status
+
 }
 
 func createPoint(container *Container, hostname string, cluster_name string) *client.Point {
@@ -49,6 +67,21 @@ func createPoint(container *Container, hostname string, cluster_name string) *cl
 	}
 
 	return influx.GetInfluxClient().CreatePoint("armada", tags, fields)
+}
+
+func createSummary(host_summary map[string]int16, hostname string, cluster_name string) *client.Point {
+	tags := map[string]string{
+		"host":         hostname,
+		"cluster_name": cluster_name,
+	}
+
+	fields := map[string]interface{}{}
+
+	for key, value := range host_summary {
+		fields[key] = value
+	}
+
+	return influx.GetInfluxClient().CreatePoint("armada_ship", tags, fields)
 }
 
 func getHostname() string {

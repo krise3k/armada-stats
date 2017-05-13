@@ -43,7 +43,7 @@ func (c *Container) Collect(waitCollectAll *sync.WaitGroup) {
 
 	utils.GetLogger().WithFields(logrus.Fields{"containerID": c.ID, "name": c.Name}).Debug("Getting stats for container")
 
-	//always realease wait group
+	//always release wait group
 	defer func() {
 		waitCollectAll.Done()
 	}()
