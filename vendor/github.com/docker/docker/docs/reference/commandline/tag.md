@@ -1,20 +1,20 @@
-<!--[metadata]>
-+++
-title = "tag"
-description = "The tag command description and usage"
-keywords = ["tag, name, image"]
-[menu.main]
-parent = "smn_cli"
-+++
-<![end-metadata]-->
+---
+redirect_from:
+  - /reference/commandline/tag/
+description: The tag command description and usage
+keywords:
+- tag, name, image
+title: docker tag
+---
 
-# tag
+```markdown
+Usage:  docker tag IMAGE[:TAG] IMAGE[:TAG]
 
-    Usage: docker tag [OPTIONS] NAME[:TAG] NAME[:TAG]
+Tag an image into a repository
 
-    Tag an image into a repository
-
-      --help               Print usage
+Options:
+      --help   Print usage
+```
 
 An image name is made up of slash-separated name components, optionally prefixed
 by a registry hostname. The hostname must comply with standard DNS rules, but

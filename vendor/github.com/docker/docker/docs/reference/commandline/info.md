@@ -1,22 +1,20 @@
-<!--[metadata]>
-+++
-title = "info"
-description = "The info command description and usage"
-keywords = ["display, docker, information"]
-[menu.main]
-parent = "smn_cli"
-+++
-<![end-metadata]-->
+---
+redirect_from:
+  - /reference/commandline/info/
+description: The info command description and usage
+keywords:
+- display, docker, information
+title: docker info
+---
 
-# info
+```markdown
+Usage:  docker info
 
+Display system-wide information
 
-    Usage: docker info [OPTIONS]
-
-    Display system-wide information
-
-      --help              Print usage
-
+Options:
+      --help   Print usage
+```
 
 This command displays system wide information regarding the Docker installation.
 Information displayed includes the kernel version, number of containers and images.
@@ -32,12 +30,12 @@ meta data regarding those images are stored. When run for the first time Docker
 allocates a certain amount of data space and meta data space from the space
 available on the volume where `/var/lib/docker` is mounted.
 
-# EXAMPLES
+# Examples
 
 ## Display Docker system information
 
 Here is a sample output for a daemon running on Ubuntu, using the overlay
-storage driver and a node that is part of a 2 node Swarm cluster:
+storage driver and a node that is part of a 2-node swarm:
 
     $ docker -D info
     Containers: 14
@@ -53,9 +51,9 @@ storage driver and a node that is part of a 2 node Swarm cluster:
     Plugins:
      Volume: local
      Network: bridge null host overlay
-    Swarm: 
+    Swarm:
      NodeID: 0gac67oclbxq7
-     IsManager: YES
+     Is Manager: true
      Managers: 2
      Nodes: 2
     Runtimes: default

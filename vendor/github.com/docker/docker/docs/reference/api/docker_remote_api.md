@@ -1,15 +1,11 @@
-<!--[metadata]>
-+++
-title = "Remote API"
-description = "API Documentation for Docker"
-keywords = ["API, Docker, rcli, REST,  documentation"]
-[menu.main]
-parent = "engine_remoteapi"
-weight=-99
-+++
-<![end-metadata]-->
-
-# Docker Remote API
+---
+redirect_from:
+  - /reference/api/docker_remote_api/
+description: API Documentation for Docker
+keywords:
+- API, Docker, rcli, REST,  documentation
+title: Docker Remote API
+---
 
 Docker's Remote API uses an open schema model.  In this model, unknown
 properties in incoming messages are ignored. Client applications need to take
@@ -29,7 +25,17 @@ later, as these versions have the `--unix-socket` flag available. To
 run `curl` against the daemon on the default socket, use the
 following:
 
-    curl --unix-socket /var/run/docker.sock http:/containers/json
+When using cUrl 7.50 or later:
+
+```console
+$ curl --unix-socket /var/run/docker.sock http://localhost/containers/json
+```
+
+When using cURL 7.40, `localhost` must be omitted:
+
+```console
+$ curl --unix-socket /var/run/docker.sock http://containers/json
+```
 
 If you have bound the Docker daemon to a different socket path or TCP
 port, you would reference that in your cURL rather than the
@@ -37,7 +43,8 @@ default.
 
 The current version of the API is v1.24 which means calling `/info` is the same
 as calling `/v1.24/info`. To call an older version of the API use
-`/v1.23/info`.
+`/v1.23/info`. If a newer daemon is installed, new properties may be returned
+even when calling older versions of the API.
 
 Use the table below to find the API version for a Docker version:
 
@@ -116,9 +123,11 @@ This section lists each version from latest to oldest.  Each listing includes a 
 
 * `POST /containers/create` now takes `StorageOpt` field.
 * `GET /info` now returns `SecurityOptions` field, showing if `apparmor`, `seccomp`, or `selinux` is supported.
+* `GET /info` no longer returns the `ExecutionDriver` property. This property was no longer used after integration
+  with ContainerD in Docker 1.11.
 * `GET /networks` now supports filtering by `label` and `driver`.
 * `GET /containers/json` now supports filtering containers by `network` name or id.
-* `POST /containers/create` now takes `MaximumIOps` and `MaximumIOBps` fields. Windows daemon only.
+* `POST /containers/create` now takes `IOMaximumBandwidth` and `IOMaximumIOps` fields. Windows daemon only.
 * `POST /containers/create` now returns an HTTP 400 "bad parameter" message
   if no command is specified (instead of an HTTP 500 "server error")
 * `GET /images/search` now takes a `filters` query parameter.
@@ -133,6 +142,12 @@ This section lists each version from latest to oldest.  Each listing includes a 
 * `POST /containers/{name:.*}/copy` is now removed and errors out starting from this API version.
 * API errors are now returned as JSON instead of plain text.
 * `POST /containers/create` and `POST /containers/(id)/start` allow you to configure kernel parameters (sysctls) for use in the container.
+* `POST /containers/<container ID>/exec` and `POST /exec/<exec ID>/start`
+  no longer expects a "Container" field to be present. This property was not used
+  and is no longer sent by the docker client.
+* `POST /containers/create/` now validates the hostname (should be a valid RFC 1123 hostname).
+* `POST /containers/create/` `HostConfig.PidMode` field now accepts `container:<name|id>`,
+  to have the container join the PID namespace of an existing container.
 
 ### v1.23 API changes
 
@@ -154,6 +169,7 @@ This section lists each version from latest to oldest.  Each listing includes a 
 * `POST /containers/create` with both `Hostname` and `Domainname` fields specified will result in the container's hostname being set to `Hostname`, rather than `Hostname.Domainname`.
 * `GET /volumes` now supports more filters, new added filters are `name` and `driver`.
 * `GET /containers/(id or name)/logs` now accepts a `details` query parameter to stream the extra attributes that were provided to the containers `LogOpts`, such as environment variables and labels, with the logs.
+* `POST /images/load` now returns progress information as a JSON stream, and has a `quiet` query parameter to suppress progress details.
 
 ### v1.22 API changes
 
@@ -208,6 +224,7 @@ This section lists each version from latest to oldest.  Each listing includes a 
 * `GET /info` now lists engine version information and return the information of `CPUShares` and `Cpuset`.
 * `GET /containers/json` will return `ImageID` of the image used by container.
 * `POST /exec/(name)/start` will now return an HTTP 409 when the container is either stopped or paused.
+* `POST /containers/create` now takes `KernelMemory` in HostConfig to specify kernel memory limit.
 * `GET /containers/(name)/json` now accepts a `size` parameter. Setting this parameter to '1' returns container size information in the `SizeRw` and `SizeRootFs` fields.
 * `GET /containers/(name)/json` now returns a `NetworkSettings.Networks` field,
   detailing network settings per network. This field deprecates the

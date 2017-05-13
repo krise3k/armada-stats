@@ -1,24 +1,24 @@
-<!--[metadata]>
-+++
-title = "commit"
-description = "The commit command description and usage"
-keywords = ["commit, file, changes"]
-[menu.main]
-parent = "smn_cli"
-+++
-<![end-metadata]-->
+---
+redirect_from:
+  - /reference/commandline/commit/
+description: The commit command description and usage
+keywords:
+- commit, file, changes
+title: docker commit
+---
 
-# commit
+```markdown
+Usage:  docker commit [OPTIONS] CONTAINER [REPOSITORY[:TAG]]
 
-    Usage: docker commit [OPTIONS] CONTAINER [REPOSITORY[:TAG]]
+Create a new image from a container's changes
 
-    Create a new image from a container's changes
-
-      -a, --author=""     Author (e.g., "John Hannibal Smith <hannibal@a-team.com>")
-      -c, --change=[]     Apply specified Dockerfile instructions while committing the image
-      --help              Print usage
-      -m, --message=""    Commit message
-      -p, --pause=true    Pause container during commit
+Options:
+  -a, --author string    Author (e.g., "John Hannibal Smith <hannibal@a-team.com>")
+  -c, --change value     Apply Dockerfile instruction to the created image (default [])
+      --help             Print usage
+  -m, --message string   Commit message
+  -p, --pause            Pause container during commit (default true)
+```
 
 It can be useful to commit a container's file changes or settings into a new
 image. This allows you debug a container by running an interactive shell, or to
@@ -52,6 +52,7 @@ created.  Supported `Dockerfile` instructions:
 
 ## Commit a container with new configurations
 
+    {% raw %}
     $ docker ps
     ID                  IMAGE               COMMAND             CREATED             STATUS              PORTS
     c3f279d17e0a        ubuntu:12.04        /bin/bash           7 days ago          Up 25 hours
@@ -62,8 +63,9 @@ created.  Supported `Dockerfile` instructions:
     f5283438590d
     $ docker inspect -f "{{ .Config.Env }}" f5283438590d
     [HOME=/ PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin DEBUG=true]
+    {% endraw %}
 
-## Commit a container with new `CMD` and `EXPOSE` instructions 
+## Commit a container with new `CMD` and `EXPOSE` instructions
 
     $ docker ps
     ID                  IMAGE               COMMAND             CREATED             STATUS              PORTS
@@ -72,7 +74,7 @@ created.  Supported `Dockerfile` instructions:
 
     $ docker commit --change='CMD ["apachectl", "-DFOREGROUND"]' -c "EXPOSE 80" c3f279d17e0a  svendowideit/testimage:version4
     f5283438590d
-    
+
     $ docker run -d svendowideit/testimage:version4
     89373736e2e7f00bc149bd783073ac43d0507da250e999f3f1036e0db60817c0
 

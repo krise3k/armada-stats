@@ -28,6 +28,7 @@ func ServiceFromGRPC(s swarmapi.Service) types.Service {
 				Resources:     resourcesFromGRPC(s.Spec.Task.Resources),
 				RestartPolicy: restartPolicyFromGRPC(s.Spec.Task.Restart),
 				Placement:     placementFromGRPC(s.Spec.Task.Placement),
+				LogDriver:     driverFromGRPC(s.Spec.Task.LogDriver),
 			},
 
 			Networks:     networks,
@@ -52,9 +53,16 @@ func ServiceFromGRPC(s swarmapi.Service) types.Service {
 		}
 
 		service.Spec.UpdateConfig.Delay, _ = ptypes.Duration(&s.Spec.Update.Delay)
+
+		switch s.Spec.Update.FailureAction {
+		case swarmapi.UpdateConfig_PAUSE:
+			service.Spec.UpdateConfig.FailureAction = types.UpdateFailureActionPause
+		case swarmapi.UpdateConfig_CONTINUE:
+			service.Spec.UpdateConfig.FailureAction = types.UpdateFailureActionContinue
+		}
 	}
 
-	//Mode
+	// Mode
 	switch t := s.Spec.GetMode().(type) {
 	case *swarmapi.ServiceSpec_Global:
 		service.Spec.Mode.Global = &types.GlobalService{}
@@ -62,6 +70,23 @@ func ServiceFromGRPC(s swarmapi.Service) types.Service {
 		service.Spec.Mode.Replicated = &types.ReplicatedService{
 			Replicas: &t.Replicated.Replicas,
 		}
+	}
+
+	// UpdateStatus
+	service.UpdateStatus = types.UpdateStatus{}
+	if s.UpdateStatus != nil {
+		switch s.UpdateStatus.State {
+		case swarmapi.UpdateStatus_UPDATING:
+			service.UpdateStatus.State = types.UpdateStateUpdating
+		case swarmapi.UpdateStatus_PAUSED:
+			service.UpdateStatus.State = types.UpdateStatePaused
+		case swarmapi.UpdateStatus_COMPLETED:
+			service.UpdateStatus.State = types.UpdateStateCompleted
+		}
+
+		service.UpdateStatus.StartedAt, _ = ptypes.Timestamp(s.UpdateStatus.StartedAt)
+		service.UpdateStatus.CompletedAt, _ = ptypes.Timestamp(s.UpdateStatus.CompletedAt)
+		service.UpdateStatus.Message = s.UpdateStatus.Message
 	}
 
 	return service
@@ -86,6 +111,7 @@ func ServiceSpecToGRPC(s types.ServiceSpec) (swarmapi.ServiceSpec, error) {
 		},
 		Task: swarmapi.TaskSpec{
 			Resources: resourcesToGRPC(s.TaskTemplate.Resources),
+			LogDriver: driverToGRPC(s.TaskTemplate.LogDriver),
 		},
 		Networks: networks,
 	}
@@ -109,9 +135,19 @@ func ServiceSpecToGRPC(s types.ServiceSpec) (swarmapi.ServiceSpec, error) {
 	}
 
 	if s.UpdateConfig != nil {
+		var failureAction swarmapi.UpdateConfig_FailureAction
+		switch s.UpdateConfig.FailureAction {
+		case types.UpdateFailureActionPause, "":
+			failureAction = swarmapi.UpdateConfig_PAUSE
+		case types.UpdateFailureActionContinue:
+			failureAction = swarmapi.UpdateConfig_CONTINUE
+		default:
+			return swarmapi.ServiceSpec{}, fmt.Errorf("unrecongized update failure action %s", s.UpdateConfig.FailureAction)
+		}
 		spec.Update = &swarmapi.UpdateConfig{
-			Parallelism: s.UpdateConfig.Parallelism,
-			Delay:       *ptypes.DurationProto(s.UpdateConfig.Delay),
+			Parallelism:   s.UpdateConfig.Parallelism,
+			Delay:         *ptypes.DurationProto(s.UpdateConfig.Delay),
+			FailureAction: failureAction,
 		}
 	}
 
@@ -200,7 +236,18 @@ func restartPolicyFromGRPC(p *swarmapi.RestartPolicy) *types.RestartPolicy {
 	var rp *types.RestartPolicy
 	if p != nil {
 		rp = &types.RestartPolicy{}
-		rp.Condition = types.RestartPolicyCondition(strings.ToLower(p.Condition.String()))
+
+		switch p.Condition {
+		case swarmapi.RestartOnNone:
+			rp.Condition = types.RestartPolicyConditionNone
+		case swarmapi.RestartOnFailure:
+			rp.Condition = types.RestartPolicyConditionOnFailure
+		case swarmapi.RestartOnAny:
+			rp.Condition = types.RestartPolicyConditionAny
+		default:
+			rp.Condition = types.RestartPolicyConditionAny
+		}
+
 		if p.Delay != nil {
 			delay, _ := ptypes.Duration(p.Delay)
 			rp.Delay = &delay
@@ -219,12 +266,19 @@ func restartPolicyToGRPC(p *types.RestartPolicy) (*swarmapi.RestartPolicy, error
 	var rp *swarmapi.RestartPolicy
 	if p != nil {
 		rp = &swarmapi.RestartPolicy{}
-		if condition, ok := swarmapi.RestartPolicy_RestartCondition_value[strings.ToUpper(string(p.Condition))]; ok {
-			rp.Condition = swarmapi.RestartPolicy_RestartCondition(condition)
-		} else if string(p.Condition) == "" {
+
+		switch p.Condition {
+		case types.RestartPolicyConditionNone:
+			rp.Condition = swarmapi.RestartOnNone
+		case types.RestartPolicyConditionOnFailure:
+			rp.Condition = swarmapi.RestartOnFailure
+		case types.RestartPolicyConditionAny:
 			rp.Condition = swarmapi.RestartOnAny
-		} else {
-			return nil, fmt.Errorf("invalid RestartCondition: %q", p.Condition)
+		default:
+			if string(p.Condition) != "" {
+				return nil, fmt.Errorf("invalid RestartCondition: %q", p.Condition)
+			}
+			rp.Condition = swarmapi.RestartOnAny
 		}
 
 		if p.Delay != nil {
@@ -249,4 +303,26 @@ func placementFromGRPC(p *swarmapi.Placement) *types.Placement {
 	}
 
 	return r
+}
+
+func driverFromGRPC(p *swarmapi.Driver) *types.Driver {
+	if p == nil {
+		return nil
+	}
+
+	return &types.Driver{
+		Name:    p.Name,
+		Options: p.Options,
+	}
+}
+
+func driverToGRPC(p *types.Driver) *swarmapi.Driver {
+	if p == nil {
+		return nil
+	}
+
+	return &swarmapi.Driver{
+		Name:    p.Name,
+		Options: p.Options,
+	}
 }

@@ -1,21 +1,21 @@
-<!--[metadata]>
-+++
-title = "logout"
-description = "The logout command description and usage"
-keywords = ["logout, docker, registry"]
-[menu.main]
-parent = "smn_cli"
-+++
-<![end-metadata]-->
+---
+redirect_from:
+  - /reference/commandline/logout/
+description: The logout command description and usage
+keywords:
+- logout, docker, registry
+title: docker logout
+---
 
-# logout
+```markdown
+Usage:  docker logout [SERVER]
 
-    Usage: docker logout [SERVER]
+Log out from a Docker registry.
+If no server is specified, the default is defined by the daemon.
 
-    Log out from a Docker registry, if no server is
-	specified "https://index.docker.io/v1/" is the default.
-
-      --help          Print usage
+Options:
+      --help   Print usage
+```
 
 For example:
 

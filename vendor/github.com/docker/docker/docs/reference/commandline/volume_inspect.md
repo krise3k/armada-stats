@@ -1,21 +1,21 @@
-<!--[metadata]>
-+++
-title = "volume inspect"
-description = "The volume inspect command description and usage"
-keywords = ["volume, inspect"]
-[menu.main]
-parent = "smn_cli"
-+++
-<![end-metadata]-->
+---
+redirect_from:
+  - /reference/commandline/volume_inspect/
+description: The volume inspect command description and usage
+keywords:
+- volume, inspect
+title: docker volume inspect
+---
 
-# volume inspect
+```markdown
+Usage:  docker volume inspect [OPTIONS] VOLUME [VOLUME...]
 
-    Usage: docker volume inspect [OPTIONS] VOLUME [VOLUME...]
+Display detailed information on one or more volumes
 
-    Return low-level information on a volume
-
-      -f, --format=       Format the output using the given go template.
-      --help              Print usage
+Options:
+  -f, --format string   Format the output using the given go template
+      --help            Print usage
+```
 
 Returns information about a volume. By default, this command renders all results
 in a JSON array. You can specify an alternate format to execute a
@@ -37,8 +37,10 @@ Example output:
       }
     ]
 
+    {% raw %}
     $ docker volume inspect --format '{{ .Mountpoint }}' 85bffb0677236974f93955d8ecc4df55ef5070117b0e53333cc1b443777be24d
     /var/lib/docker/volumes/85bffb0677236974f93955d8ecc4df55ef5070117b0e53333cc1b443777be24d/_data
+    {% endraw %}
 
 ## Related information
 

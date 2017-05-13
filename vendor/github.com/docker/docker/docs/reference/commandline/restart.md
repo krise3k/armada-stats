@@ -1,18 +1,18 @@
-<!--[metadata]>
-+++
-title = "restart"
-description = "The restart command description and usage"
-keywords = ["restart, container, Docker"]
-[menu.main]
-parent = "smn_cli"
-+++
-<![end-metadata]-->
+---
+redirect_from:
+  - /reference/commandline/restart/
+description: The restart command description and usage
+keywords:
+- restart, container, Docker
+title: docker restart
+---
 
-# restart
+```markdown
+Usage:  docker restart [OPTIONS] CONTAINER [CONTAINER...]
 
-    Usage: docker restart [OPTIONS] CONTAINER [CONTAINER...]
+Restart one or more containers
 
-    Restart a container
-
-      --help             Print usage
-      -t, --time=10      Seconds to wait for stop before killing the container
+Options:
+      --help       Print usage
+  -t, --time int   Seconds to wait for stop before killing the container (default 10)
+```

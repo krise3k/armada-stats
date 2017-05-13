@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/net/context"
@@ -41,7 +42,6 @@ const (
 
 	exitStatusHealthy   = 0 // Container is healthy
 	exitStatusUnhealthy = 1 // Container is unhealthy
-	exitStatusStarting  = 2 // Container needs more time to start
 )
 
 // probe implementations know how to run a particular type of probe.
@@ -127,12 +127,10 @@ func handleProbeResult(d *Daemon, c *container.Container, result *types.Healthch
 	if result.ExitCode == exitStatusHealthy {
 		h.FailingStreak = 0
 		h.Status = types.Healthy
-	} else if result.ExitCode == exitStatusStarting && c.State.Health.Status == types.Starting {
-		// The container is not ready yet. Remain in the starting state.
 	} else {
 		// Failure (including invalid exit code)
 		h.FailingStreak++
-		if c.State.Health.FailingStreak >= retries {
+		if h.FailingStreak >= retries {
 			h.Status = types.Unhealthy
 		}
 		// Else we're starting or healthy. Stay in that state.
@@ -203,6 +201,7 @@ func monitor(d *Daemon, c *container.Container, stop chan struct{}, probe probe)
 }
 
 // Get a suitable probe implementation for the container's healthcheck configuration.
+// Nil will be returned if no healthcheck was configured or NONE was set.
 func getProbe(c *container.Container) probe {
 	config := c.Config.Healthcheck
 	if config == nil || len(config.Test) == 0 {
@@ -244,17 +243,20 @@ func (d *Daemon) updateHealthMonitor(c *container.Container) {
 // two instances at once.
 // Called with c locked.
 func (d *Daemon) initHealthMonitor(c *container.Container) {
-	if c.Config.Healthcheck == nil {
+	// If no healthcheck is setup then don't init the monitor
+	if getProbe(c) == nil {
 		return
 	}
 
 	// This is needed in case we're auto-restarting
 	d.stopHealthchecks(c)
 
-	if c.State.Health == nil {
-		h := &container.Health{}
+	if h := c.State.Health; h != nil {
 		h.Status = types.Starting
 		h.FailingStreak = 0
+	} else {
+		h := &container.Health{}
+		h.Status = types.Starting
 		c.State.Health = h
 	}
 
@@ -273,11 +275,15 @@ func (d *Daemon) stopHealthchecks(c *container.Container) {
 // Buffer up to maxOutputLen bytes. Further data is discarded.
 type limitedBuffer struct {
 	buf       bytes.Buffer
+	mu        sync.Mutex
 	truncated bool // indicates that data has been lost
 }
 
 // Append to limitedBuffer while there is room.
 func (b *limitedBuffer) Write(data []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
 	bufLen := b.buf.Len()
 	dataLen := len(data)
 	keep := min(maxOutputLen-bufLen, dataLen)
@@ -292,6 +298,9 @@ func (b *limitedBuffer) Write(data []byte) (int, error) {
 
 // The contents of the buffer, with "..." appended if it overflowed.
 func (b *limitedBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
 	out := b.buf.String()
 	if b.truncated {
 		out = out + "..."

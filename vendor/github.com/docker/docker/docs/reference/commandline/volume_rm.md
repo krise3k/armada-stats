@@ -1,22 +1,25 @@
-<!--[metadata]>
-+++
-title = "volume rm"
-description = "the volume rm command description and usage"
-keywords = ["volume, rm"]
-[menu.main]
-parent = "smn_cli"
-+++
-<![end-metadata]-->
+---
+redirect_from:
+  - /reference/commandline/volume_rm/
+description: the volume rm command description and usage
+keywords:
+- volume, rm
+title: docker volume rm
+---
 
-# volume rm
+```markdown
+Usage:  docker volume rm VOLUME [VOLUME...]
 
-    Usage: docker volume rm [OPTIONS] VOLUME [VOLUME...]
+Remove one or more volumes
 
-    Remove a volume
+Aliases:
+  rm, remove
 
-      --help             Print usage
+Options:
+      --help   Print usage
+```
 
-Removes one or more volumes. You cannot remove a volume that is in use by a container.
+Remove one or more volumes. You cannot remove a volume that is in use by a container.
 
     $ docker volume rm hello
     hello

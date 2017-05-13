@@ -1,21 +1,21 @@
-<!--[metadata]>
-+++
-title = "export"
-description = "The export command description and usage"
-keywords = ["export, file, system, container"]
-[menu.main]
-parent = "smn_cli"
-+++
-<![end-metadata]-->
+---
+redirect_from:
+  - /reference/commandline/export/
+description: The export command description and usage
+keywords:
+- export, file, system, container
+title: docker export
+---
 
-# export
+```markdown
+Usage:  docker export [OPTIONS] CONTAINER
 
-    Usage: docker export [OPTIONS] CONTAINER
+Export a container's filesystem as a tar archive
 
-    Export the contents of a container's filesystem as a tar archive
-
-      --help             Print usage
-      -o, --output=""    Write to a file, instead of STDOUT
+Options:
+      --help            Print usage
+  -o, --output string   Write to a file, instead of STDOUT
+```
 
 The `docker export` command does not export the contents of volumes associated
 with the container. If a volume is mounted on top of an existing directory in

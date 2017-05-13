@@ -2,54 +2,25 @@ package: github.com/krise3k/armada-stats
 import:
 - package: github.com/Sirupsen/logrus
   version: ~v0.11.5
-- package: github.com/docker/docker
-  version: 91fa49071d7373ccdee4585b403b488e1fce2efa
-  subpackages:
-  - opts
-  - pkg/archive
-  - pkg/fileutils
-  - pkg/homedir
-  - pkg/idtools
-  - pkg/ioutils
-  - pkg/longpath
-  - pkg/pools
-  - pkg/promise
-  - pkg/stdcopy
-  - pkg/system
-- package: github.com/docker/engine-api
-  version: f90ecdb1e989f834dabbd91807e891094aa069fe
-  subpackages:
-  - types/filters
-  - types/versions
 - package: github.com/docker/go-units
   version: v0.3.1
-- package: github.com/getsentry/raven-go
-  version: b8684db99b339af19aa6f067df3be9de6e995f89
 - package: github.com/influxdata/influxdb
   version: ~v1.2.4
   subpackages:
   - client/v2
   - models
   - pkg/escape
-- package: github.com/olebedev/config
-  version: dd1049a3738432dfc49417e2ae5bd97e132ecac6
 - package: github.com/serenize/snaker
   version: 8824b61eca66d308fcb2d515287d3d7a28dba8d6
-- package: golang.org/x/net
-  version: e445b19913b9d40fdbdfe19ac5e3d314aafd6f63
-  subpackages:
-  - context
-- package: golang.org/x/sys
-  version: 62bee037599929a6e9146f29d10dd5208c43507d
-  subpackages:
-  - unix
-- package: gopkg.in/yaml.v2
-  version: a83829b6f1293c91addabc89d0571c246397bbf4
-- package: github.com/certifi/gocertifi
-  version: 2016.09.26
 - package: github.com/evalphobia/logrus_sentry
   version: ~v0.2.12
 - package: github.com/fatih/structs
   version: ~v1.0.0
+- package: github.com/docker/docker
+  version: ~v1.12.6
 - package: github.com/fsouza/go-dockerclient
   version: 1a3d0cfd7814bbfe44ada7617654948c99891749
+- package: github.com/getsentry/raven-go
+  version: b8684db99b339af19aa6f067df3be9de6e995f89
+- package: github.com/olebedev/config
+  version: dd1049a3738432dfc49417e2ae5bd97e132ecac6

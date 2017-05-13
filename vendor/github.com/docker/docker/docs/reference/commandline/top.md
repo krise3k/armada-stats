@@ -1,17 +1,17 @@
-<!--[metadata]>
-+++
-title = "top"
-description = "The top command description and usage"
-keywords = ["container, running, processes"]
-[menu.main]
-parent = "smn_cli"
-+++
-<![end-metadata]-->
+---
+redirect_from:
+  - /reference/commandline/top/
+description: The top command description and usage
+keywords:
+- container, running, processes
+title: docker top
+---
 
-# top
+```markdown
+Usage:  docker top CONTAINER [ps OPTIONS]
 
-    Usage: docker top [OPTIONS] CONTAINER [ps OPTIONS]
+Display the running processes of a container
 
-    Display the running processes of a container
-
-      --help          Print usage
+Options:
+      --help   Print usage
+```

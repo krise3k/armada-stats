@@ -9,6 +9,7 @@ import (
 
 	"github.com/docker/docker/pkg/integration/checker"
 	"github.com/docker/engine-api/types"
+	"github.com/docker/engine-api/types/filters"
 	"github.com/docker/engine-api/types/swarm"
 	"github.com/go-check/check"
 )
@@ -22,21 +23,9 @@ type SwarmDaemon struct {
 }
 
 // Init initializes a new swarm cluster.
-func (d *SwarmDaemon) Init(autoAccept map[string]bool, secret string) error {
-	req := swarm.InitRequest{
-		ListenAddr: d.listenAddr,
-	}
-	for _, role := range []swarm.NodeRole{swarm.NodeRoleManager, swarm.NodeRoleWorker} {
-		policy := swarm.Policy{
-			Role:       role,
-			Autoaccept: autoAccept[strings.ToLower(string(role))],
-		}
-
-		if secret != "" {
-			policy.Secret = &secret
-		}
-
-		req.Spec.AcceptancePolicy.Policies = append(req.Spec.AcceptancePolicy.Policies, policy)
+func (d *SwarmDaemon) Init(req swarm.InitRequest) error {
+	if req.ListenAddr == "" {
+		req.ListenAddr = d.listenAddr
 	}
 	status, out, err := d.SockRequest("POST", "/swarm/init", req)
 	if status != http.StatusOK {
@@ -53,17 +42,10 @@ func (d *SwarmDaemon) Init(autoAccept map[string]bool, secret string) error {
 	return nil
 }
 
-// Join joins a current daemon with existing cluster.
-func (d *SwarmDaemon) Join(remoteAddr, secret, cahash string, manager bool) error {
-	req := swarm.JoinRequest{
-		ListenAddr:  d.listenAddr,
-		RemoteAddrs: []string{remoteAddr},
-		Manager:     manager,
-		CACertHash:  cahash,
-	}
-
-	if secret != "" {
-		req.Secret = secret
+// Join joins a daemon to an existing cluster.
+func (d *SwarmDaemon) Join(req swarm.JoinRequest) error {
+	if req.ListenAddr == "" {
+		req.ListenAddr = d.listenAddr
 	}
 	status, out, err := d.SockRequest("POST", "/swarm/join", req)
 	if status != http.StatusOK {
@@ -138,8 +120,66 @@ func (d *SwarmDaemon) getService(c *check.C, id string) *swarm.Service {
 	c.Assert(status, checker.Equals, http.StatusOK, check.Commentf("output: %q", string(out)))
 	c.Assert(err, checker.IsNil)
 	c.Assert(json.Unmarshal(out, &service), checker.IsNil)
-	c.Assert(service.ID, checker.Equals, id)
 	return &service
+}
+
+func (d *SwarmDaemon) getServiceTasks(c *check.C, service string) []swarm.Task {
+	var tasks []swarm.Task
+
+	filterArgs := filters.NewArgs()
+	filterArgs.Add("desired-state", "running")
+	filterArgs.Add("service", service)
+	filters, err := filters.ToParam(filterArgs)
+	c.Assert(err, checker.IsNil)
+
+	status, out, err := d.SockRequest("GET", "/tasks?filters="+filters, nil)
+	c.Assert(status, checker.Equals, http.StatusOK, check.Commentf("output: %q", string(out)))
+	c.Assert(err, checker.IsNil, check.Commentf(string(out)))
+	c.Assert(json.Unmarshal(out, &tasks), checker.IsNil)
+	return tasks
+}
+
+func (d *SwarmDaemon) checkRunningTaskImages(c *check.C) (interface{}, check.CommentInterface) {
+	var tasks []swarm.Task
+
+	filterArgs := filters.NewArgs()
+	filterArgs.Add("desired-state", "running")
+	filters, err := filters.ToParam(filterArgs)
+	c.Assert(err, checker.IsNil)
+
+	status, out, err := d.SockRequest("GET", "/tasks?filters="+filters, nil)
+	c.Assert(status, checker.Equals, http.StatusOK, check.Commentf("output: %q", string(out)))
+	c.Assert(err, checker.IsNil, check.Commentf(string(out)))
+	c.Assert(json.Unmarshal(out, &tasks), checker.IsNil)
+
+	result := make(map[string]int)
+	for _, task := range tasks {
+		if task.Status.State == swarm.TaskStateRunning {
+			result[task.Spec.ContainerSpec.Image]++
+		}
+	}
+	return result, nil
+}
+
+func (d *SwarmDaemon) checkNodeReadyCount(c *check.C) (interface{}, check.CommentInterface) {
+	nodes := d.listNodes(c)
+	var readyCount int
+	for _, node := range nodes {
+		if node.Status.State == swarm.NodeStateReady {
+			readyCount++
+		}
+	}
+	return readyCount, nil
+}
+
+func (d *SwarmDaemon) getTask(c *check.C, id string) swarm.Task {
+	var task swarm.Task
+
+	status, out, err := d.SockRequest("GET", "/tasks/"+id, nil)
+	c.Assert(status, checker.Equals, http.StatusOK, check.Commentf("output: %q", string(out)))
+	c.Assert(err, checker.IsNil, check.Commentf(string(out)))
+	c.Assert(json.Unmarshal(out, &task), checker.IsNil)
+	return task
 }
 
 func (d *SwarmDaemon) updateService(c *check.C, service *swarm.Service, f ...serviceConstructor) {
@@ -166,6 +206,17 @@ func (d *SwarmDaemon) getNode(c *check.C, id string) *swarm.Node {
 	c.Assert(json.Unmarshal(out, &node), checker.IsNil)
 	c.Assert(node.ID, checker.Equals, id)
 	return &node
+}
+
+func (d *SwarmDaemon) removeNode(c *check.C, id string, force bool) {
+	url := "/nodes/" + id
+	if force {
+		url += "?force=1"
+	}
+
+	status, out, err := d.SockRequest("DELETE", url, nil)
+	c.Assert(status, checker.Equals, http.StatusOK, check.Commentf("output: %q", string(out)))
+	c.Assert(err, checker.IsNil)
 }
 
 func (d *SwarmDaemon) updateNode(c *check.C, id string, f ...nodeConstructor) {
@@ -196,18 +247,81 @@ func (d *SwarmDaemon) listNodes(c *check.C) []swarm.Node {
 	return nodes
 }
 
+func (d *SwarmDaemon) listServices(c *check.C) []swarm.Service {
+	status, out, err := d.SockRequest("GET", "/services", nil)
+	c.Assert(err, checker.IsNil)
+	c.Assert(status, checker.Equals, http.StatusOK, check.Commentf("output: %q", string(out)))
+
+	services := []swarm.Service{}
+	c.Assert(json.Unmarshal(out, &services), checker.IsNil)
+	return services
+}
+
+func (d *SwarmDaemon) getSwarm(c *check.C) swarm.Swarm {
+	var sw swarm.Swarm
+	status, out, err := d.SockRequest("GET", "/swarm", nil)
+	c.Assert(err, checker.IsNil)
+	c.Assert(status, checker.Equals, http.StatusOK, check.Commentf("output: %q", string(out)))
+	c.Assert(json.Unmarshal(out, &sw), checker.IsNil)
+	return sw
+}
+
 func (d *SwarmDaemon) updateSwarm(c *check.C, f ...specConstructor) {
+	sw := d.getSwarm(c)
+	for _, fn := range f {
+		fn(&sw.Spec)
+	}
+	url := fmt.Sprintf("/swarm/update?version=%d", sw.Version.Index)
+	status, out, err := d.SockRequest("POST", url, sw.Spec)
+	c.Assert(err, checker.IsNil)
+	c.Assert(status, checker.Equals, http.StatusOK, check.Commentf("output: %q", string(out)))
+}
+
+func (d *SwarmDaemon) rotateTokens(c *check.C) {
 	var sw swarm.Swarm
 	status, out, err := d.SockRequest("GET", "/swarm", nil)
 	c.Assert(err, checker.IsNil)
 	c.Assert(status, checker.Equals, http.StatusOK, check.Commentf("output: %q", string(out)))
 	c.Assert(json.Unmarshal(out, &sw), checker.IsNil)
 
-	for _, fn := range f {
-		fn(&sw.Spec)
-	}
-	url := fmt.Sprintf("/swarm/update?version=%d", sw.Version.Index)
+	url := fmt.Sprintf("/swarm/update?version=%d&rotateWorkerToken=true&rotateManagerToken=true", sw.Version.Index)
 	status, out, err = d.SockRequest("POST", url, sw.Spec)
 	c.Assert(err, checker.IsNil)
 	c.Assert(status, checker.Equals, http.StatusOK, check.Commentf("output: %q", string(out)))
+}
+
+func (d *SwarmDaemon) joinTokens(c *check.C) swarm.JoinTokens {
+	var sw swarm.Swarm
+	status, out, err := d.SockRequest("GET", "/swarm", nil)
+	c.Assert(err, checker.IsNil)
+	c.Assert(status, checker.Equals, http.StatusOK, check.Commentf("output: %q", string(out)))
+	c.Assert(json.Unmarshal(out, &sw), checker.IsNil)
+	return sw.JoinTokens
+}
+
+func (d *SwarmDaemon) checkLocalNodeState(c *check.C) (interface{}, check.CommentInterface) {
+	info, err := d.info()
+	c.Assert(err, checker.IsNil)
+	return info.LocalNodeState, nil
+}
+
+func (d *SwarmDaemon) checkControlAvailable(c *check.C) (interface{}, check.CommentInterface) {
+	info, err := d.info()
+	c.Assert(err, checker.IsNil)
+	c.Assert(info.LocalNodeState, checker.Equals, swarm.LocalNodeStateActive)
+	return info.ControlAvailable, nil
+}
+
+func (d *SwarmDaemon) cmdRetryOutOfSequence(args ...string) (string, error) {
+	for i := 0; ; i++ {
+		out, err := d.Cmd(args[0], args[1:]...)
+		if err != nil {
+			if strings.Contains(err.Error(), "update out of sequence") {
+				if i < 10 {
+					continue
+				}
+			}
+		}
+		return out, err
+	}
 }

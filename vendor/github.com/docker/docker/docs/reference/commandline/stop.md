@@ -1,22 +1,21 @@
-<!--[metadata]>
-+++
-title = "stop"
-description = "The stop command description and usage"
-keywords = ["stop, SIGKILL, SIGTERM"]
-[menu.main]
-parent = "smn_cli"
-+++
-<![end-metadata]-->
+---
+redirect_from:
+  - /reference/commandline/stop/
+description: The stop command description and usage
+keywords:
+- stop, SIGKILL, SIGTERM
+title: docker stop
+---
 
-# stop
+```markdown
+Usage:  docker stop [OPTIONS] CONTAINER [CONTAINER...]
 
-    Usage: docker stop [OPTIONS] CONTAINER [CONTAINER...]
+Stop one or more running containers
 
-    Stop a container by sending SIGTERM and then SIGKILL after a
-    grace period
-
-      --help             Print usage
-      -t, --time=10      Seconds to wait for stop before killing it
+Options:
+      --help       Print usage
+  -t, --time int   Seconds to wait for stop before killing it (default 10)
+```
 
 The main process inside the container will receive `SIGTERM`, and after a grace
 period, `SIGKILL`.

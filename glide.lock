@@ -1,10 +1,10 @@
-hash: d6a5dcce9a4290c480543cbf7d9b909617c08acf80ff1551310804efe1e5757f
-updated: 2017-05-13T20:19:00.195969258+02:00
+hash: a351884301422f8212c3aa9dd5a12eb264349bed3c844b9cb804d4772edc0df4
+updated: 2017-05-14T01:22:23.066516617+02:00
 imports:
 - name: github.com/certifi/gocertifi
-  version: a61bf5eafa3aee233ec8043e9da052447e5463dd
+  version: a9c833d2837d3b16888d55d5aafa9ffe9afb22b0
 - name: github.com/docker/docker
-  version: 91fa49071d7373ccdee4585b403b488e1fce2efa
+  version: 78d18021ecba00c00730dec9d56de6896f9e708d
   subpackages:
   - opts
   - pkg/archive
@@ -18,7 +18,7 @@ imports:
   - pkg/stdcopy
   - pkg/system
 - name: github.com/docker/engine-api
-  version: f90ecdb1e989f834dabbd91807e891094aa069fe
+  version: 4290f40c056686fcaa5c9caf02eac1dde9315adf
   subpackages:
   - types/filters
   - types/versions
@@ -33,7 +33,7 @@ imports:
 - name: github.com/getsentry/raven-go
   version: b8684db99b339af19aa6f067df3be9de6e995f89
 - name: github.com/hashicorp/go-cleanhttp
-  version: ad28ea4487f05916463e2423a55166280e8254b5
+  version: 3573b8b52aa7b37b9358d966a898feb387f62437
 - name: github.com/influxdata/influxdb
   version: 77909d7c7826afe597b12d957996d6e16cd1afaa
   subpackages:
@@ -43,7 +43,7 @@ imports:
 - name: github.com/olebedev/config
   version: dd1049a3738432dfc49417e2ae5bd97e132ecac6
 - name: github.com/opencontainers/runc
-  version: 629e35666d31f743090452416c8df207d9fdbd34
+  version: c1287819af73a4408e089a358d28d18f6adb7dfc
   subpackages:
   - libcontainer/user
 - name: github.com/pkg/errors
@@ -53,13 +53,13 @@ imports:
 - name: github.com/Sirupsen/logrus
   version: ba1b36c82c5e05c4f912a88eab0dcd91a171688f
 - name: golang.org/x/net
-  version: e445b19913b9d40fdbdfe19ac5e3d314aafd6f63
+  version: 84f0e6f92b10139f986b1756e149a7d9de270cdc
   subpackages:
   - context
 - name: golang.org/x/sys
-  version: 62bee037599929a6e9146f29d10dd5208c43507d
+  version: f845067cf72a21fb4929b0e6a35273bd83b56396
   subpackages:
   - unix
 - name: gopkg.in/yaml.v2
-  version: a83829b6f1293c91addabc89d0571c246397bbf4
+  version: cd8b52f8269e0feb286dfeef29f8fe4d5b397e0b
 testImports: []

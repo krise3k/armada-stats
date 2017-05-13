@@ -44,9 +44,13 @@ func (sb *sandbox) startResolver(restore bool) {
 		}
 		sb.resolver.SetExtServers(sb.extDNS)
 
-		sb.osSbox.InvokeFunc(sb.resolver.SetupFunc())
+		if err = sb.osSbox.InvokeFunc(sb.resolver.SetupFunc()); err != nil {
+			log.Errorf("Resolver Setup function failed for container %s, %q", sb.ContainerID(), err)
+			return
+		}
+
 		if err = sb.resolver.Start(); err != nil {
-			log.Errorf("Resolver Setup/Start failed for container %s, %q", sb.ContainerID(), err)
+			log.Errorf("Resolver Start failed for container %s, %q", sb.ContainerID(), err)
 		}
 	})
 }
@@ -275,14 +279,22 @@ func (sb *sandbox) updateDNS(ipv6Enabled bool) error {
 	if err != nil {
 		return err
 	}
-	if err = ioutil.WriteFile(tmpHashFile.Name(), []byte(newRC.Hash), filePerm); err != nil {
+	if err = tmpHashFile.Chmod(filePerm); err != nil {
+		tmpHashFile.Close()
+		return err
+	}
+	_, err = tmpHashFile.Write([]byte(newRC.Hash))
+	if err1 := tmpHashFile.Close(); err == nil {
+		err = err1
+	}
+	if err != nil {
 		return err
 	}
 	return os.Rename(tmpHashFile.Name(), hashFile)
 }
 
 // Embedded DNS server has to be enabled for this sandbox. Rebuild the container's
-// resolv.conf by doing the follwing
+// resolv.conf by doing the following
 // - Save the external name servers in resolv.conf in the sandbox
 // - Add only the embedded server's IP to container's resolv.conf
 // - If the embedded server needs any resolv.conf options add it to the current list

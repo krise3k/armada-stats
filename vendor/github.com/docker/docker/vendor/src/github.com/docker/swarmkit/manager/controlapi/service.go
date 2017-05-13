@@ -3,11 +3,14 @@ package controlapi
 import (
 	"errors"
 	"reflect"
+	"strconv"
 
 	"github.com/docker/engine-api/types/reference"
 	"github.com/docker/swarmkit/api"
 	"github.com/docker/swarmkit/identity"
+	"github.com/docker/swarmkit/manager/scheduler"
 	"github.com/docker/swarmkit/manager/state/store"
+	"github.com/docker/swarmkit/protobuf/ptypes"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -15,6 +18,7 @@ import (
 
 var (
 	errNetworkUpdateNotSupported = errors.New("changing network in service is not supported")
+	errModeChangeNotAllowed      = errors.New("service mode change is not allowed")
 )
 
 func validateResources(r *api.Resources) error {
@@ -45,21 +49,82 @@ func validateResourceRequirements(r *api.ResourceRequirements) error {
 	return nil
 }
 
-func validateServiceSpecTemplate(spec *api.ServiceSpec) error {
-	if err := validateResourceRequirements(spec.Task.Resources); err != nil {
+func validateRestartPolicy(rp *api.RestartPolicy) error {
+	if rp == nil {
+		return nil
+	}
+
+	if rp.Delay != nil {
+		delay, err := ptypes.Duration(rp.Delay)
+		if err != nil {
+			return err
+		}
+		if delay < 0 {
+			return grpc.Errorf(codes.InvalidArgument, "TaskSpec: restart-delay cannot be negative")
+		}
+	}
+
+	if rp.Window != nil {
+		win, err := ptypes.Duration(rp.Window)
+		if err != nil {
+			return err
+		}
+		if win < 0 {
+			return grpc.Errorf(codes.InvalidArgument, "TaskSpec: restart-window cannot be negative")
+		}
+	}
+
+	return nil
+}
+
+func validatePlacement(placement *api.Placement) error {
+	if placement == nil {
+		return nil
+	}
+	_, err := scheduler.ParseExprs(placement.Constraints)
+	return err
+}
+
+func validateUpdate(uc *api.UpdateConfig) error {
+	if uc == nil {
+		return nil
+	}
+
+	delay, err := ptypes.Duration(&uc.Delay)
+	if err != nil {
 		return err
 	}
 
-	if spec.Task.GetRuntime() == nil {
+	if delay < 0 {
+		return grpc.Errorf(codes.InvalidArgument, "TaskSpec: update-delay cannot be negative")
+	}
+
+	return nil
+}
+
+func validateTask(taskSpec api.TaskSpec) error {
+	if err := validateResourceRequirements(taskSpec.Resources); err != nil {
+		return err
+	}
+
+	if err := validateRestartPolicy(taskSpec.Restart); err != nil {
+		return err
+	}
+
+	if err := validatePlacement(taskSpec.Placement); err != nil {
+		return err
+	}
+
+	if taskSpec.GetRuntime() == nil {
 		return grpc.Errorf(codes.InvalidArgument, "TaskSpec: missing runtime")
 	}
 
-	_, ok := spec.Task.GetRuntime().(*api.TaskSpec_Container)
+	_, ok := taskSpec.GetRuntime().(*api.TaskSpec_Container)
 	if !ok {
 		return grpc.Errorf(codes.Unimplemented, "RuntimeSpec: unimplemented runtime in service spec")
 	}
 
-	container := spec.Task.GetContainer()
+	container := taskSpec.GetContainer()
 	if container == nil {
 		return grpc.Errorf(codes.InvalidArgument, "ContainerSpec: missing in service spec")
 	}
@@ -80,15 +145,49 @@ func validateEndpointSpec(epSpec *api.EndpointSpec) error {
 		return nil
 	}
 
-	portSet := make(map[api.PortConfig]struct{})
-	for _, port := range epSpec.Ports {
-		if _, ok := portSet[*port]; ok {
-			return grpc.Errorf(codes.InvalidArgument, "EndpointSpec: duplicate ports provided")
-		}
-
-		portSet[*port] = struct{}{}
+	if len(epSpec.Ports) > 0 && epSpec.Mode == api.ResolutionModeDNSRoundRobin {
+		return grpc.Errorf(codes.InvalidArgument, "EndpointSpec: ports can't be used with dnsrr mode")
 	}
 
+	type portSpec struct {
+		publishedPort uint32
+		protocol      api.PortConfig_Protocol
+	}
+
+	portSet := make(map[portSpec]struct{})
+	for _, port := range epSpec.Ports {
+		// If published port is not specified, it does not conflict
+		// with any others.
+		if port.PublishedPort == 0 {
+			continue
+		}
+
+		portSpec := portSpec{publishedPort: port.PublishedPort, protocol: port.Protocol}
+		if _, ok := portSet[portSpec]; ok {
+			return grpc.Errorf(codes.InvalidArgument, "EndpointSpec: duplicate published ports provided")
+		}
+
+		portSet[portSpec] = struct{}{}
+	}
+
+	return nil
+}
+
+func (s *Server) validateNetworks(networks []*api.ServiceSpec_NetworkAttachmentConfig) error {
+	for _, na := range networks {
+		var network *api.Network
+		s.store.View(func(tx store.ReadTx) {
+			network = store.FindNetwork(tx, na.Target)
+		})
+		if network == nil {
+			continue
+		}
+		if _, ok := network.Spec.Annotations.Labels["com.docker.swarm.internal"]; ok {
+			return grpc.Errorf(codes.InvalidArgument,
+				"Service cannot be explicitly attached to %q network which is a swarm internal network",
+				network.Spec.Annotations.Name)
+		}
+	}
 	return nil
 }
 
@@ -99,8 +198,71 @@ func validateServiceSpec(spec *api.ServiceSpec) error {
 	if err := validateAnnotations(spec.Annotations); err != nil {
 		return err
 	}
-	if err := validateServiceSpecTemplate(spec); err != nil {
+	if err := validateTask(spec.Task); err != nil {
 		return err
+	}
+	if err := validateUpdate(spec.Update); err != nil {
+		return err
+	}
+	if err := validateEndpointSpec(spec.Endpoint); err != nil {
+		return err
+	}
+	return nil
+}
+
+// checkPortConflicts does a best effort to find if the passed in spec has port
+// conflicts with existing services.
+func (s *Server) checkPortConflicts(spec *api.ServiceSpec, serviceID string) error {
+	if spec.Endpoint == nil {
+		return nil
+	}
+
+	pcToString := func(pc *api.PortConfig) string {
+		port := strconv.FormatUint(uint64(pc.PublishedPort), 10)
+		return port + "/" + pc.Protocol.String()
+	}
+
+	reqPorts := make(map[string]bool)
+	for _, pc := range spec.Endpoint.Ports {
+		if pc.PublishedPort > 0 {
+			reqPorts[pcToString(pc)] = true
+		}
+	}
+	if len(reqPorts) == 0 {
+		return nil
+	}
+
+	var (
+		services []*api.Service
+		err      error
+	)
+
+	s.store.View(func(tx store.ReadTx) {
+		services, err = store.FindServices(tx, store.All)
+	})
+	if err != nil {
+		return err
+	}
+
+	for _, service := range services {
+		// If service ID is the same (and not "") then this is an update
+		if serviceID != "" && serviceID == service.ID {
+			continue
+		}
+		if service.Spec.Endpoint != nil {
+			for _, pc := range service.Spec.Endpoint.Ports {
+				if reqPorts[pcToString(pc)] {
+					return grpc.Errorf(codes.InvalidArgument, "port '%d' is already in use by service '%s' (%s)", pc.PublishedPort, service.Spec.Annotations.Name, service.ID)
+				}
+			}
+		}
+		if service.Endpoint != nil {
+			for _, pc := range service.Endpoint.Ports {
+				if reqPorts[pcToString(pc)] {
+					return grpc.Errorf(codes.InvalidArgument, "port '%d' is already in use by service '%s' (%s)", pc.PublishedPort, service.Spec.Annotations.Name, service.ID)
+				}
+			}
+		}
 	}
 	return nil
 }
@@ -112,6 +274,14 @@ func validateServiceSpec(spec *api.ServiceSpec) error {
 // - Returns an error if the creation fails.
 func (s *Server) CreateService(ctx context.Context, request *api.CreateServiceRequest) (*api.CreateServiceResponse, error) {
 	if err := validateServiceSpec(request.Spec); err != nil {
+		return nil, err
+	}
+
+	if err := s.validateNetworks(request.Spec.Networks); err != nil {
+		return nil, err
+	}
+
+	if err := s.checkPortConflicts(request.Spec, ""); err != nil {
 		return nil, err
 	}
 
@@ -169,6 +339,19 @@ func (s *Server) UpdateService(ctx context.Context, request *api.UpdateServiceRe
 	}
 
 	var service *api.Service
+	s.store.View(func(tx store.ReadTx) {
+		service = store.GetService(tx, request.ServiceID)
+	})
+	if service == nil {
+		return nil, grpc.Errorf(codes.NotFound, "service %s not found", request.ServiceID)
+	}
+
+	if request.Spec.Endpoint != nil && !reflect.DeepEqual(request.Spec.Endpoint, service.Spec.Endpoint) {
+		if err := s.checkPortConflicts(request.Spec, request.ServiceID); err != nil {
+			return nil, err
+		}
+	}
+
 	err := s.store.Update(func(tx store.Tx) error {
 		service = store.GetService(tx, request.ServiceID)
 		if service == nil {
@@ -179,8 +362,18 @@ func (s *Server) UpdateService(ctx context.Context, request *api.UpdateServiceRe
 			return errNetworkUpdateNotSupported
 		}
 
+		// orchestrator is designed to be stateless, so it should not deal
+		// with service mode change (comparing current config with previous config).
+		// proper way to change service mode is to delete and re-add.
+		if request.Spec != nil && reflect.TypeOf(service.Spec.Mode) != reflect.TypeOf(request.Spec.Mode) {
+			return errModeChangeNotAllowed
+		}
 		service.Meta.Version = *request.ServiceVersion
 		service.Spec = *request.Spec.Copy()
+
+		// Reset update status
+		service.UpdateStatus = nil
+
 		return store.UpdateService(tx, service)
 	})
 	if err != nil {
@@ -245,6 +438,8 @@ func (s *Server) ListServices(ctx context.Context, request *api.ListServicesRequ
 		switch {
 		case request.Filters != nil && len(request.Filters.Names) > 0:
 			services, err = store.FindServices(tx, buildFilters(store.ByName, request.Filters.Names))
+		case request.Filters != nil && len(request.Filters.NamePrefixes) > 0:
+			services, err = store.FindServices(tx, buildFilters(store.ByNamePrefix, request.Filters.NamePrefixes))
 		case request.Filters != nil && len(request.Filters.IDPrefixes) > 0:
 			services, err = store.FindServices(tx, buildFilters(store.ByIDPrefix, request.Filters.IDPrefixes))
 		default:
@@ -259,6 +454,9 @@ func (s *Server) ListServices(ctx context.Context, request *api.ListServicesRequ
 		services = filterServices(services,
 			func(e *api.Service) bool {
 				return filterContains(e.Spec.Annotations.Name, request.Filters.Names)
+			},
+			func(e *api.Service) bool {
+				return filterContainsPrefix(e.Spec.Annotations.Name, request.Filters.NamePrefixes)
 			},
 			func(e *api.Service) bool {
 				return filterContainsPrefix(e.ID, request.Filters.IDPrefixes)

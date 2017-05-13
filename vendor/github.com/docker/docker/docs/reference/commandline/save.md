@@ -1,21 +1,21 @@
-<!--[metadata]>
-+++
-title = "save"
-description = "The save command description and usage"
-keywords = ["tarred, repository, backup"]
-[menu.main]
-parent = "smn_cli"
-+++
-<![end-metadata]-->
+---
+redirect_from:
+  - /reference/commandline/save/
+description: The save command description and usage
+keywords:
+- tarred, repository, backup
+title: docker save
+---
 
-# save
+```markdown
+Usage:  docker save [OPTIONS] IMAGE [IMAGE...]
 
-    Usage: docker save [OPTIONS] IMAGE [IMAGE...]
+Save one or more images to a tar archive (streamed to STDOUT by default)
 
-    Save one or more images to a tar archive (streamed to STDOUT by default)
-
-      --help             Print usage
-      -o, --output=""    Write to a file, instead of STDOUT
+Options:
+      --help            Print usage
+  -o, --output string   Write to a file, instead of STDOUT
+```
 
 Produces a tarred repository to the standard output stream.
 Contains all parent layers, and all tags + versions, or specified `repo:tag`, for

@@ -1,46 +1,51 @@
-<!--[metadata]>
-+++
-title = "plugin disable"
-description = "the plugin disable command description and usage"
-keywords = ["plugin, disable"]
-advisory = "experimental"
-[menu.main]
-parent = "smn_cli"
-+++
-<![end-metadata]-->
+---
+redirect_from:
+  - /reference/commandline/plugin_disable/
+advisory: experimental
+description: the plugin disable command description and usage
+keywords:
+- plugin, disable
+title: docker plugin disable (experimental)
+---
 
-# plugin disable (experimental)
+```markdown
+Usage:  docker plugin disable PLUGIN
 
-    Usage: docker plugin disable PLUGIN
+Disable a plugin
 
-    Disable a plugin
-
-      --help             Print usage
+Options:
+      --help   Print usage
+```
 
 Disables a plugin. The plugin must be installed before it can be disabled,
 see [`docker plugin install`](plugin_install.md).
 
 
-The following example shows that the `no-remove` plugin is currently installed
+The following example shows that the `no-remove` plugin is installed
 and active:
 
 ```bash
 $ docker plugin ls
-NAME        	            TAG			ACTIVE
-tiborvass/no-remove	    latest		true
+
+NAME                        TAG           ACTIVE
+tiborvass/no-remove         latest        true
 ```
+
 To disable the plugin, use the following command:
 
 ```bash
-$ docker plugin disable tiborvass/no-remove:latest
+$ docker plugin disable tiborvass/no-remove
+
+tiborvass/no-remove
 ```
 
 After the plugin is disabled, it appears as "inactive" in the list of plugins:
 
 ```bash
 $ docker plugin ls
-NAME			VERSION		ACTIVE
-tiborvass/no-remove	latest		false
+
+NAME                    VERSION           ACTIVE
+tiborvass/no-remove     latest            false
 ```
 
 ## Related information

@@ -1,21 +1,21 @@
-<!--[metadata]>
-+++
-title = "kill"
-description = "The kill command description and usage"
-keywords = ["container, kill, signal"]
-[menu.main]
-parent = "smn_cli"
-+++
-<![end-metadata]-->
+---
+redirect_from:
+  - /reference/commandline/kill/
+description: The kill command description and usage
+keywords:
+- container, kill, signal
+title: docker kill
+---
 
-# kill
+```markdown
+Usage:  docker kill [OPTIONS] CONTAINER [CONTAINER...]
 
-    Usage: docker kill [OPTIONS] CONTAINER [CONTAINER...]
+Kill one or more running containers
 
-    Kill a running container using SIGKILL or a specified signal
-
-      --help                 Print usage
-      -s, --signal="KILL"    Signal to send to the container
+Options:
+      --help            Print usage
+  -s, --signal string   Signal to send to the container (default "KILL")
+```
 
 The main process inside the container will be sent `SIGKILL`, or any
 signal specified with option `--signal`.

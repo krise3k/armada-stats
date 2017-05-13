@@ -114,12 +114,12 @@ func (epi *endpointInterface) UnmarshalJSON(b []byte) error {
 		}
 	}
 	if v, ok := epMap["llAddrs"]; ok {
-		list := v.([]string)
+		list := v.([]interface{})
 		epi.llAddrs = make([]*net.IPNet, 0, len(list))
 		for _, llS := range list {
-			ll, err := types.ParseCIDR(llS)
+			ll, err := types.ParseCIDR(llS.(string))
 			if err != nil {
-				return types.InternalErrorf("failed to decode endpoint interface link-local address (%s) after json unmarshal: %v", llS, err)
+				return types.InternalErrorf("failed to decode endpoint interface link-local address (%v) after json unmarshal: %v", llS, err)
 			}
 			epi.llAddrs = append(epi.llAddrs, ll)
 		}
@@ -463,6 +463,8 @@ func (epj *endpointJoinInfo) CopyTo(dstEpj *endpointJoinInfo) error {
 	dstEpj.disableGatewayService = epj.disableGatewayService
 	dstEpj.StaticRoutes = make([]*types.StaticRoute, len(epj.StaticRoutes))
 	copy(dstEpj.StaticRoutes, epj.StaticRoutes)
+	dstEpj.driverTableEntries = make([]*tableEntry, len(epj.driverTableEntries))
+	copy(dstEpj.driverTableEntries, epj.driverTableEntries)
 	dstEpj.gw = types.GetIPCopy(epj.gw)
 	dstEpj.gw = types.GetIPCopy(epj.gw6)
 	return nil

@@ -1,24 +1,24 @@
-<!--[metadata]>
-+++
-title = "plugin ls"
-description = "The plugin ls command description and usage"
-keywords = ["plugin, list"]
-advisory = "experimental"
-[menu.main]
-parent = "smn_cli"
-+++
-<![end-metadata]-->
+---
+redirect_from:
+  - /reference/commandline/plugin_ls/
+advisory: experimental
+description: The plugin ls command description and usage
+keywords:
+- plugin, list
+title: docker plugin ls (experimental)
+---
 
-# plugin ls (experimental)
+```markdown
+Usage:  docker plugin ls
 
-    Usage: docker plugin ls
+List plugins
 
-    List plugins
+Aliases:
+  ls, list
 
+Options:
       --help   Print usage
-
-    Aliases:
-      ls, list
+```
 
 Lists all the plugins that are currently installed. You can install plugins
 using the [`docker plugin install`](plugin_install.md) command.
@@ -27,8 +27,9 @@ Example output:
 
 ```bash
 $ docker plugin ls
-NAME                	VERSION             ACTIVE
-tiborvass/no-remove	latest              true
+
+NAME                  VERSION             ACTIVE
+tiborvass/no-remove   latest              true
 ```
 
 ## Related information

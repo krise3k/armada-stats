@@ -1,23 +1,23 @@
-<!--[metadata]>
-+++
-title = "load"
-description = "The load command description and usage"
-keywords = ["stdin, tarred, repository"]
-[menu.main]
-parent = "smn_cli"
-+++
-<![end-metadata]-->
+---
+redirect_from:
+  - /reference/commandline/load/
+description: The load command description and usage
+keywords:
+- stdin, tarred, repository
+title: docker load
+---
 
-# load
+```markdown
+Usage:  docker load [OPTIONS]
 
-    Usage: docker load [OPTIONS]
+Load an image from a tar archive or STDIN
 
-    Load an image from a tar archive or STDIN and shows image names or
-    IDs imported.
-
-      --help             Print usage
-      -i, --input=""     Read from a tar archive file, instead of STDIN. The tarball may be compressed with gzip, bzip, or xz
-      -q, --quiet        Suppress the load progress bar but still outputs the imported images
+Options:
+      --help           Print usage
+  -i, --input string   Read from tar archive file, instead of STDIN.
+                       The tarball may be compressed with gzip, bzip, or xz
+  -q, --quiet          Suppress the load output but still outputs the imported images
+```
 
 Loads a tarred repository from a file or the standard input stream.
 Restores both images and tags.

@@ -13,6 +13,7 @@ import (
 
 	"github.com/opencontainers/runc/libcontainer"
 	"github.com/opencontainers/runc/libcontainer/configs"
+	"github.com/opencontainers/runc/libcontainer/utils"
 )
 
 func TestExecIn(t *testing.T) {
@@ -61,6 +62,9 @@ func TestExecIn(t *testing.T) {
 	if !strings.Contains(out, "cat") || !strings.Contains(out, "ps") {
 		t.Fatalf("unexpected running process, output %q", out)
 	}
+	if strings.Contains(out, "\r") {
+		t.Fatalf("unexpected carriage-return in output")
+	}
 }
 
 func TestExecInUsernsRlimit(t *testing.T) {
@@ -86,8 +90,8 @@ func testExecInRlimit(t *testing.T, userns bool) {
 
 	config := newTemplateConfig(rootfs)
 	if userns {
-		config.UidMappings = []configs.IDMap{{0, 0, 1000}}
-		config.GidMappings = []configs.IDMap{{0, 0, 1000}}
+		config.UidMappings = []configs.IDMap{{HostID: 0, ContainerID: 0, Size: 1000}}
+		config.GidMappings = []configs.IDMap{{HostID: 0, ContainerID: 0, Size: 1000}}
 		config.Namespaces = append(config.Namespaces, configs.Namespace{Type: configs.NEWUSER})
 	}
 
@@ -131,6 +135,64 @@ func testExecInRlimit(t *testing.T, userns bool) {
 	out := buffers.Stdout.String()
 	if limit := strings.TrimSpace(out); limit != "1026" {
 		t.Fatalf("expected rlimit to be 1026, got %s", limit)
+	}
+}
+
+func TestExecInAdditionalGroups(t *testing.T) {
+	if testing.Short() {
+		return
+	}
+
+	rootfs, err := newRootfs()
+	ok(t, err)
+	defer remove(rootfs)
+
+	config := newTemplateConfig(rootfs)
+	container, err := newContainer(config)
+	ok(t, err)
+	defer container.Destroy()
+
+	// Execute a first process in the container
+	stdinR, stdinW, err := os.Pipe()
+	ok(t, err)
+	process := &libcontainer.Process{
+		Cwd:   "/",
+		Args:  []string{"cat"},
+		Env:   standardEnvironment,
+		Stdin: stdinR,
+	}
+	err = container.Run(process)
+	stdinR.Close()
+	defer stdinW.Close()
+	ok(t, err)
+
+	var stdout bytes.Buffer
+	pconfig := libcontainer.Process{
+		Cwd:              "/",
+		Args:             []string{"sh", "-c", "id", "-Gn"},
+		Env:              standardEnvironment,
+		Stdin:            nil,
+		Stdout:           &stdout,
+		AdditionalGroups: []string{"plugdev", "audio"},
+	}
+	err = container.Run(&pconfig)
+	ok(t, err)
+
+	// Wait for process
+	waitProcess(&pconfig, t)
+
+	stdinW.Close()
+	waitProcess(process, t)
+
+	outputGroups := string(stdout.Bytes())
+
+	// Check that the groups output has the groups that we specified
+	if !strings.Contains(outputGroups, "audio") {
+		t.Fatalf("Listed groups do not contain the audio group as expected: %v", outputGroups)
+	}
+
+	if !strings.Contains(outputGroups, "plugdev") {
+		t.Fatalf("Listed groups do not contain the plugdev group as expected: %v", outputGroups)
 	}
 }
 
@@ -218,14 +280,41 @@ func TestExecInTTY(t *testing.T) {
 		Args: []string{"ps"},
 		Env:  standardEnvironment,
 	}
-	console, err := ps.NewConsole(0, 0)
+	parent, child, err := utils.NewSockPair("console")
+	if err != nil {
+		ok(t, err)
+	}
+	defer parent.Close()
+	defer child.Close()
+	ps.ConsoleSocket = child
+	type cdata struct {
+		c   libcontainer.Console
+		err error
+	}
+	dc := make(chan *cdata, 1)
+	go func() {
+		f, err := utils.RecvFd(parent)
+		if err != nil {
+			dc <- &cdata{
+				err: err,
+			}
+		}
+		dc <- &cdata{
+			c: libcontainer.ConsoleFromFile(f),
+		}
+	}()
+	err = container.Run(ps)
+	ok(t, err)
+	data := <-dc
+	if data.err != nil {
+		ok(t, data.err)
+	}
+	console := data.c
 	copy := make(chan struct{})
 	go func() {
 		io.Copy(&stdout, console)
 		close(copy)
 	}()
-	ok(t, err)
-	err = container.Run(ps)
 	ok(t, err)
 	select {
 	case <-time.After(5 * time.Second):
@@ -238,8 +327,11 @@ func TestExecInTTY(t *testing.T) {
 	waitProcess(process, t)
 
 	out := stdout.String()
-	if !strings.Contains(out, "cat") || !strings.Contains(string(out), "ps") {
+	if !strings.Contains(out, "cat") || !strings.Contains(out, "ps") {
 		t.Fatalf("unexpected running process, output %q", out)
+	}
+	if strings.Contains(out, "\r") {
+		t.Fatalf("unexpected carriage-return in output")
 	}
 }
 
@@ -439,8 +531,8 @@ func TestExecInUserns(t *testing.T) {
 	ok(t, err)
 	defer remove(rootfs)
 	config := newTemplateConfig(rootfs)
-	config.UidMappings = []configs.IDMap{{0, 0, 1000}}
-	config.GidMappings = []configs.IDMap{{0, 0, 1000}}
+	config.UidMappings = []configs.IDMap{{HostID: 0, ContainerID: 0, Size: 1000}}
+	config.GidMappings = []configs.IDMap{{HostID: 0, ContainerID: 0, Size: 1000}}
 	config.Namespaces = append(config.Namespaces, configs.Namespace{Type: configs.NEWUSER})
 	container, err := newContainer(config)
 	ok(t, err)

@@ -81,6 +81,7 @@ DEFAULT_BUNDLES=(
 )
 
 VERSION=$(< ./VERSION)
+! BUILDTIME=$(date --rfc-3339 ns 2> /dev/null | sed -e 's/ /T/')
 if command -v git &> /dev/null && [ -d .git ] && git rev-parse &> /dev/null; then
 	GITCOMMIT=$(git rev-parse --short HEAD)
 	if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
@@ -93,11 +94,6 @@ if command -v git &> /dev/null && [ -d .git ] && git rev-parse &> /dev/null; the
 		echo "# Here is the current list:"
 		git status --porcelain --untracked-files=no
 		echo "#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
-	fi
-	! BUILDTIME=$(date --rfc-3339 ns 2> /dev/null | sed -e 's/ /T/') &> /dev/null
-	if [ -z $BUILDTIME ]; then
-		# If using bash 3.1 which doesn't support --rfc-3389, eg Windows CI
-		BUILDTIME=$(date -u)
 	fi
 elif [ "$DOCKER_GITCOMMIT" ]; then
 	GITCOMMIT="$DOCKER_GITCOMMIT"
@@ -118,7 +114,8 @@ if [ "$AUTO_GOPATH" ]; then
 	if [ "$(go env GOOS)" = 'solaris' ]; then
 		# sys/unix is installed outside the standard library on solaris
 		# TODO need to allow for version change, need to get version from go
-		export GOPATH="${GOPATH}:/usr/lib/gocode/1.6.2"
+		export GO_VERSION=${GO_VERSION:-"1.6.3"}
+		export GOPATH="${GOPATH}:/usr/lib/gocode/${GO_VERSION}"
 	fi
 fi
 

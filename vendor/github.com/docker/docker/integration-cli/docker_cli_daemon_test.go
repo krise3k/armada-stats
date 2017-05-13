@@ -1,4 +1,4 @@
-// +build !windows
+// +build linux
 
 package main
 
@@ -2091,6 +2091,166 @@ func (s *DockerDaemonSuite) TestDaemonRestartWithNames(c *check.C) {
 	c.Assert(test3validated, check.Equals, true)
 }
 
+// TestDaemonRestartWithKilledRunningContainer requires live restore of running containers
+func (s *DockerDaemonSuite) TestDaemonRestartWithKilledRunningContainer(t *check.C) {
+	// TODO(mlaventure): Not sure what would the exit code be on windows
+	testRequires(t, DaemonIsLinux)
+	if err := s.d.StartWithBusybox(); err != nil {
+		t.Fatal(err)
+	}
+
+	cid, err := s.d.Cmd("run", "-d", "--name", "test", "busybox", "top")
+	defer s.d.Stop()
+	if err != nil {
+		t.Fatal(cid, err)
+	}
+	cid = strings.TrimSpace(cid)
+
+	pid, err := s.d.Cmd("inspect", "-f", "{{.State.Pid}}", cid)
+	t.Assert(err, check.IsNil)
+	pid = strings.TrimSpace(pid)
+
+	// Kill the daemon
+	if err := s.d.Kill(); err != nil {
+		t.Fatal(err)
+	}
+
+	// kill the container
+	runCmd := exec.Command(ctrBinary, "--address", "unix:///var/run/docker/libcontainerd/docker-containerd.sock", "containers", "kill", cid)
+	if out, ec, err := runCommandWithOutput(runCmd); err != nil {
+		t.Fatalf("Failed to run ctr, ExitCode: %d, err: '%v' output: '%s' cid: '%s'\n", ec, err, out, cid)
+	}
+
+	// Give time to containerd to process the command if we don't
+	// the exit event might be received after we do the inspect
+	pidCmd := exec.Command("kill", "-0", pid)
+	_, ec, _ := runCommandWithOutput(pidCmd)
+	for ec == 0 {
+		time.Sleep(1 * time.Second)
+		_, ec, _ = runCommandWithOutput(pidCmd)
+	}
+
+	// restart the daemon
+	if err := s.d.Start(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Check that we've got the correct exit code
+	out, err := s.d.Cmd("inspect", "-f", "{{.State.ExitCode}}", cid)
+	t.Assert(err, check.IsNil)
+
+	out = strings.TrimSpace(out)
+	if out != "143" {
+		t.Fatalf("Expected exit code '%s' got '%s' for container '%s'\n", "143", out, cid)
+	}
+
+}
+
+// os.Kill should kill daemon ungracefully, leaving behind live containers.
+// The live containers should be known to the restarted daemon. Stopping
+// them now, should remove the mounts.
+func (s *DockerDaemonSuite) TestCleanupMountsAfterDaemonCrash(c *check.C) {
+	testRequires(c, DaemonIsLinux)
+	c.Assert(s.d.StartWithBusybox("--live-restore"), check.IsNil)
+
+	out, err := s.d.Cmd("run", "-d", "busybox", "top")
+	c.Assert(err, check.IsNil, check.Commentf("Output: %s", out))
+	id := strings.TrimSpace(out)
+
+	c.Assert(s.d.cmd.Process.Signal(os.Kill), check.IsNil)
+	mountOut, err := ioutil.ReadFile("/proc/self/mountinfo")
+	c.Assert(err, check.IsNil, check.Commentf("Output: %s", mountOut))
+
+	// container mounts should exist even after daemon has crashed.
+	comment := check.Commentf("%s should stay mounted from older daemon start:\nDaemon root repository %s\n%s", id, s.d.folder, mountOut)
+	c.Assert(strings.Contains(string(mountOut), id), check.Equals, true, comment)
+
+	// restart daemon.
+	if err := s.d.Restart("--live-restore"); err != nil {
+		c.Fatal(err)
+	}
+
+	// container should be running.
+	out, err = s.d.Cmd("inspect", "--format='{{.State.Running}}'", id)
+	c.Assert(err, check.IsNil, check.Commentf("Output: %s", out))
+	out = strings.TrimSpace(out)
+	if out != "true" {
+		c.Fatalf("Container %s expected to stay alive after daemon restart", id)
+	}
+
+	// 'docker stop' should work.
+	out, err = s.d.Cmd("stop", id)
+	c.Assert(err, check.IsNil, check.Commentf("Output: %s", out))
+
+	// Now, container mounts should be gone.
+	mountOut, err = ioutil.ReadFile("/proc/self/mountinfo")
+	c.Assert(err, check.IsNil, check.Commentf("Output: %s", mountOut))
+	comment = check.Commentf("%s is still mounted from older daemon start:\nDaemon root repository %s\n%s", id, s.d.folder, mountOut)
+	c.Assert(strings.Contains(string(mountOut), id), check.Equals, false, comment)
+}
+
+// TestDaemonRestartWithUnpausedRunningContainer requires live restore of running containers.
+func (s *DockerDaemonSuite) TestDaemonRestartWithUnpausedRunningContainer(t *check.C) {
+	// TODO(mlaventure): Not sure what would the exit code be on windows
+	testRequires(t, DaemonIsLinux)
+	if err := s.d.StartWithBusybox("--live-restore"); err != nil {
+		t.Fatal(err)
+	}
+
+	cid, err := s.d.Cmd("run", "-d", "--name", "test", "busybox", "top")
+	defer s.d.Stop()
+	if err != nil {
+		t.Fatal(cid, err)
+	}
+	cid = strings.TrimSpace(cid)
+
+	pid, err := s.d.Cmd("inspect", "-f", "{{.State.Pid}}", cid)
+	t.Assert(err, check.IsNil)
+	pid = strings.TrimSpace(pid)
+
+	// pause the container
+	if _, err := s.d.Cmd("pause", cid); err != nil {
+		t.Fatal(cid, err)
+	}
+
+	// Kill the daemon
+	if err := s.d.Kill(); err != nil {
+		t.Fatal(err)
+	}
+
+	// resume the container
+	runCmd := exec.Command(ctrBinary, "--address", "unix:///var/run/docker/libcontainerd/docker-containerd.sock", "containers", "resume", cid)
+	if out, ec, err := runCommandWithOutput(runCmd); err != nil {
+		t.Fatalf("Failed to run ctr, ExitCode: %d, err: '%v' output: '%s' cid: '%s'\n", ec, err, out, cid)
+	}
+
+	// Give time to containerd to process the command if we don't
+	// the resume event might be received after we do the inspect
+	pidCmd := exec.Command("kill", "-0", pid)
+	_, ec, _ := runCommandWithOutput(pidCmd)
+	for ec == 0 {
+		time.Sleep(1 * time.Second)
+		_, ec, _ = runCommandWithOutput(pidCmd)
+	}
+
+	// restart the daemon
+	if err := s.d.Start("--live-restore"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Check that we've got the correct status
+	out, err := s.d.Cmd("inspect", "-f", "{{.State.Status}}", cid)
+	t.Assert(err, check.IsNil)
+
+	out = strings.TrimSpace(out)
+	if out != "running" {
+		t.Fatalf("Expected exit code '%s' got '%s' for container '%s'\n", "running", out, cid)
+	}
+	if _, err := s.d.Cmd("kill", cid); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // TestRunLinksChanged checks that creating a new container with the same name does not update links
 // this ensures that the old, pre gh#16032 functionality continues on
 func (s *DockerDaemonSuite) TestRunLinksChanged(c *check.C) {
@@ -2343,7 +2503,7 @@ func (s *DockerDaemonSuite) TestBuildOnDisabledBridgeNetworkDaemon(c *check.C) {
 }
 
 // Test case for #21976
-func (s *DockerDaemonSuite) TestDaemonDNSInHostMode(c *check.C) {
+func (s *DockerDaemonSuite) TestDaemonDnsInHostMode(c *check.C) {
 	testRequires(c, SameHostDaemon, DaemonIsLinux)
 
 	err := s.d.StartWithBusybox("--dns", "1.2.3.4")
@@ -2355,7 +2515,7 @@ func (s *DockerDaemonSuite) TestDaemonDNSInHostMode(c *check.C) {
 }
 
 // Test case for #21976
-func (s *DockerDaemonSuite) TestDaemonDNSSearchInHostMode(c *check.C) {
+func (s *DockerDaemonSuite) TestDaemonDnsSearchInHostMode(c *check.C) {
 	testRequires(c, SameHostDaemon, DaemonIsLinux)
 
 	err := s.d.StartWithBusybox("--dns-search", "example.com")
@@ -2367,7 +2527,7 @@ func (s *DockerDaemonSuite) TestDaemonDNSSearchInHostMode(c *check.C) {
 }
 
 // Test case for #21976
-func (s *DockerDaemonSuite) TestDaemonDNSOptionsInHostMode(c *check.C) {
+func (s *DockerDaemonSuite) TestDaemonDnsOptionsInHostMode(c *check.C) {
 	testRequires(c, SameHostDaemon, DaemonIsLinux)
 
 	err := s.d.StartWithBusybox("--dns-opt", "timeout:3")
@@ -2556,4 +2716,36 @@ func (s *DockerDaemonSuite) TestRunWithRuntimeFromCommandLine(c *check.C) {
 	// Run with default runtime explicitly
 	out, err = s.d.Cmd("run", "--rm", "--runtime=runc", "busybox", "ls")
 	c.Assert(err, check.IsNil, check.Commentf(out))
+}
+
+// #29598
+func (s *DockerDaemonSuite) TestRestartPolicyWithLiveRestore(c *check.C) {
+	testRequires(c, SameHostDaemon, DaemonIsLinux)
+	c.Assert(s.d.StartWithBusybox("--live-restore"), check.IsNil)
+
+	out, err := s.d.Cmd("run", "-d", "--restart", "always", "busybox", "top")
+	c.Assert(err, check.IsNil, check.Commentf("Output: %s", out))
+	id := strings.TrimSpace(out)
+
+	c.Assert(s.d.Restart("--live-restore"), check.IsNil)
+
+	c.Assert(s.d.waitRun(id), check.IsNil)
+
+	pid, err := s.d.Cmd("inspect", "-f", "{{.State.Pid}}", id)
+	c.Assert(err, check.IsNil)
+	pidint, err := strconv.Atoi(strings.TrimSpace(pid))
+	c.Assert(err, check.IsNil)
+	c.Assert(syscall.Kill(pidint, syscall.SIGKILL), check.IsNil)
+
+	// This test is only for v1.12 and only checks that killing of a process
+	// doesn't cause a panic. Actual issue is fixed in v1.13 with a proper test.
+	calls := 0
+	for range time.NewTicker(500 * time.Millisecond).C {
+		out, err := s.d.inspectFilter(id, "json .Id")
+		c.Assert(err, checker.IsNil, check.Commentf(out))
+		calls++
+		if calls >= 10 {
+			break
+		}
+	}
 }

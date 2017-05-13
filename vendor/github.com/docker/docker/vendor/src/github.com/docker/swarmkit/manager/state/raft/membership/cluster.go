@@ -27,8 +27,6 @@ var (
 // Cluster represents a set of active
 // raft Members
 type Cluster struct {
-	id uint64
-
 	mu      sync.RWMutex
 	members map[uint64]*Member
 
@@ -103,17 +101,43 @@ func (c *Cluster) RemoveMember(id uint64) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if c.members[id] == nil {
-		return ErrIDNotFound
-	}
-
-	conn := c.members[id].Conn
-	if conn != nil {
-		_ = conn.Close()
+	if c.members[id] != nil {
+		conn := c.members[id].Conn
+		if conn != nil {
+			_ = conn.Close()
+		}
+		delete(c.members, id)
 	}
 
 	c.removed[id] = true
-	delete(c.members, id)
+	return nil
+}
+
+// ReplaceMemberConnection replaces the member's GRPC connection and GRPC
+// client.
+func (c *Cluster) ReplaceMemberConnection(id uint64, oldConn *Member, newConn *Member) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	oldMember, ok := c.members[id]
+	if !ok {
+		return ErrIDNotFound
+	}
+
+	if oldConn.Conn != oldMember.Conn {
+		// The connection was already replaced. Don't do it again.
+		newConn.Conn.Close()
+		return nil
+	}
+
+	oldMember.Conn.Close()
+
+	newMember := *oldMember
+	newMember.Conn = newConn.Conn
+	newMember.RaftClient = newConn.RaftClient
+
+	c.members[id] = &newMember
+
 	return nil
 }
 
@@ -169,19 +193,15 @@ func (c *Cluster) ValidateConfigurationChange(cc raftpb.ConfChange) error {
 // that might block or harm the Cluster on Member recovery
 func (c *Cluster) CanRemoveMember(from uint64, id uint64) bool {
 	members := c.Members()
-
-	nmembers := 0
-	nreachable := 0
+	nreachable := 0 // reachable managers after removal
 
 	for _, m := range members {
-		// Skip the node that is going to be deleted
 		if m.RaftID == id {
 			continue
 		}
 
 		// Local node from where the remove is issued
 		if m.RaftID == from {
-			nmembers++
 			nreachable++
 			continue
 		}
@@ -190,16 +210,9 @@ func (c *Cluster) CanRemoveMember(from uint64, id uint64) bool {
 		if err == nil && connState == grpc.Ready {
 			nreachable++
 		}
-
-		nmembers++
 	}
 
-	// Special case of 2 managers
-	if nreachable == 1 && len(members) <= 2 {
-		return false
-	}
-
-	nquorum := nmembers/2 + 1
+	nquorum := (len(members)-1)/2 + 1
 	if nreachable < nquorum {
 		return false
 	}

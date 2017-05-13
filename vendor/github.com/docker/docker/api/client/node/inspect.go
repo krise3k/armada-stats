@@ -27,7 +27,7 @@ func newInspectCommand(dockerCli *client.DockerCli) *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "inspect [OPTIONS] self|NODE [NODE...]",
-		Short: "Inspect a node in the swarm",
+		Short: "Display detailed information on one or more nodes",
 		Args:  cli.RequiresMinArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			opts.nodeIds = args
@@ -37,7 +37,7 @@ func newInspectCommand(dockerCli *client.DockerCli) *cobra.Command {
 
 	flags := cmd.Flags()
 	flags.StringVarP(&opts.format, "format", "f", "", "Format the output using the given go template")
-	flags.BoolVarP(&opts.pretty, "pretty", "p", false, "Print the information in a human friendly format.")
+	flags.BoolVar(&opts.pretty, "pretty", false, "Print the information in a human friendly format.")
 	return cmd
 }
 
@@ -45,11 +45,11 @@ func runInspect(dockerCli *client.DockerCli, opts inspectOptions) error {
 	client := dockerCli.Client()
 	ctx := context.Background()
 	getRef := func(ref string) (interface{}, []byte, error) {
-		nodeRef, err := nodeReference(client, ctx, ref)
+		nodeRef, err := Reference(client, ctx, ref)
 		if err != nil {
 			return nil, nil, err
 		}
-		node, err := client.NodeInspect(ctx, nodeRef)
+		node, _, err := client.NodeInspectWithRaw(ctx, nodeRef)
 		return node, nil, err
 	}
 
@@ -71,6 +71,8 @@ func printHumanFriendly(out io.Writer, refs []string, getRef inspect.GetRefFunc)
 		// print extra space between objects, but not after the last one
 		if idx+1 != len(refs) {
 			fmt.Fprintf(out, "\n\n")
+		} else {
+			fmt.Fprintf(out, "\n")
 		}
 	}
 	return nil
@@ -88,6 +90,7 @@ func printNode(out io.Writer, node swarm.Node) {
 	}
 
 	ioutils.FprintfIfNotEmpty(out, "Hostname:\t\t%s\n", node.Description.Hostname)
+	fmt.Fprintf(out, "Joined at:\t\t%s\n", client.PrettyPrint(node.CreatedAt))
 	fmt.Fprintln(out, "Status:")
 	fmt.Fprintf(out, " State:\t\t\t%s\n", client.PrettyPrint(node.Status.State))
 	ioutils.FprintfIfNotEmpty(out, " Message:\t\t%s\n", client.PrettyPrint(node.Status.Message))
@@ -134,8 +137,7 @@ func printNode(out io.Writer, node swarm.Node) {
 	if len(node.Description.Engine.Labels) != 0 {
 		fmt.Fprintln(out, "Engine Labels:")
 		for k, v := range node.Description.Engine.Labels {
-			fmt.Fprintf(out, " - %s = %s", k, v)
+			fmt.Fprintf(out, " - %s = %s\n", k, v)
 		}
 	}
-
 }

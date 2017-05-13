@@ -2,10 +2,13 @@ package exec
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/Sirupsen/logrus"
 	"github.com/docker/swarmkit/api"
+	"github.com/docker/swarmkit/api/equality"
 	"github.com/docker/swarmkit/log"
+	"github.com/docker/swarmkit/protobuf/ptypes"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 )
@@ -55,7 +58,7 @@ type ContainerStatuser interface {
 // correct status depending on the tasks current state according to the result.
 //
 // Unlike Do, if an error is returned, the status should still be reported. The
-// error merely reports the
+// error merely reports the failure at getting the controller.
 func Resolve(ctx context.Context, task *api.Task, executor Executor) (Controller, *api.TaskStatus, error) {
 	status := task.Status.Copy()
 
@@ -182,6 +185,10 @@ func Do(ctx context.Context, task *api.Task, ctlr Controller) (*api.TaskStatus, 
 	// is completed.
 	defer func() {
 		logStateChange(ctx, task.DesiredState, task.Status.State, status.State)
+
+		if !equality.TaskStatusesEqualStable(status, &task.Status) {
+			status.Timestamp = ptypes.MustTimestampProto(time.Now())
+		}
 	}()
 
 	// extract the container status from the container, if supported.

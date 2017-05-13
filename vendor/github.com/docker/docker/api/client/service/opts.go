@@ -16,11 +16,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var (
-	// DefaultReplicas is the default replicas to use for a replicated service
-	DefaultReplicas uint64 = 1
-)
-
 type int64Value interface {
 	Value() int64
 }
@@ -176,34 +171,44 @@ func (m *MountOpt) Set(value string) error {
 		}
 	}
 
+	mount.Type = swarm.MountTypeVolume // default to volume mounts
+	// Set writable as the default
 	for _, field := range fields {
 		parts := strings.SplitN(field, "=", 2)
-		if len(parts) == 1 && strings.ToLower(parts[0]) == "writable" {
-			mount.Writable = true
-			continue
+		key := strings.ToLower(parts[0])
+
+		if len(parts) == 1 {
+			switch key {
+			case "readonly", "ro":
+				mount.ReadOnly = true
+				continue
+			case "volume-nocopy":
+				volumeOptions().NoCopy = true
+				continue
+			}
 		}
 
 		if len(parts) != 2 {
 			return fmt.Errorf("invalid field '%s' must be a key=value pair", field)
 		}
 
-		key, value := parts[0], parts[1]
-		switch strings.ToLower(key) {
+		value := parts[1]
+		switch key {
 		case "type":
-			mount.Type = swarm.MountType(strings.ToUpper(value))
-		case "source":
+			mount.Type = swarm.MountType(strings.ToLower(value))
+		case "source", "src":
 			mount.Source = value
-		case "target":
+		case "target", "dst", "destination":
 			mount.Target = value
-		case "writable":
-			mount.Writable, err = strconv.ParseBool(value)
+		case "readonly", "ro":
+			mount.ReadOnly, err = strconv.ParseBool(value)
 			if err != nil {
-				return fmt.Errorf("invalid value for writable: %s", value)
+				return fmt.Errorf("invalid value for %s: %s", key, value)
 			}
 		case "bind-propagation":
-			bindOptions().Propagation = swarm.MountPropagation(strings.ToUpper(value))
-		case "volume-populate":
-			volumeOptions().Populate, err = strconv.ParseBool(value)
+			bindOptions().Propagation = swarm.MountPropagation(strings.ToLower(value))
+		case "volume-nocopy":
+			volumeOptions().NoCopy, err = strconv.ParseBool(value)
 			if err != nil {
 				return fmt.Errorf("invalid value for populate: %s", value)
 			}
@@ -211,13 +216,13 @@ func (m *MountOpt) Set(value string) error {
 			setValueOnMap(volumeOptions().Labels, value)
 		case "volume-driver":
 			volumeOptions().DriverConfig.Name = value
-		case "volume-driver-opt":
+		case "volume-opt":
 			if volumeOptions().DriverConfig.Options == nil {
 				volumeOptions().DriverConfig.Options = make(map[string]string)
 			}
 			setValueOnMap(volumeOptions().DriverConfig.Options, value)
 		default:
-			return fmt.Errorf("unexpected key '%s' in '%s'", key, value)
+			return fmt.Errorf("unexpected key '%s' in '%s'", key, field)
 		}
 	}
 
@@ -227,6 +232,17 @@ func (m *MountOpt) Set(value string) error {
 
 	if mount.Target == "" {
 		return fmt.Errorf("target is required")
+	}
+
+	if mount.VolumeOptions != nil && mount.Source == "" {
+		return fmt.Errorf("source is required when specifying volume-* options")
+	}
+
+	if mount.Type == swarm.MountTypeBind && mount.VolumeOptions != nil {
+		return fmt.Errorf("cannot mix 'volume-*' options with mount type '%s'", swarm.MountTypeBind)
+	}
+	if mount.Type == swarm.MountTypeVolume && mount.BindOptions != nil {
+		return fmt.Errorf("cannot mix 'bind-*' options with mount type '%s'", swarm.MountTypeVolume)
 	}
 
 	m.values = append(m.values, mount)
@@ -256,6 +272,7 @@ func (m *MountOpt) Value() []swarm.Mount {
 type updateOptions struct {
 	parallelism uint64
 	delay       time.Duration
+	onFailure   string
 }
 
 type resourceOptions struct {
@@ -340,6 +357,27 @@ func convertPortToPortConfig(
 	return ports
 }
 
+type logDriverOptions struct {
+	name string
+	opts opts.ListOpts
+}
+
+func newLogDriverOptions() logDriverOptions {
+	return logDriverOptions{opts: opts.NewListOpts(runconfigopts.ValidateEnv)}
+}
+
+func (ldo *logDriverOptions) toLogDriver() *swarm.Driver {
+	if ldo.name == "" {
+		return nil
+	}
+
+	// set the log driver only if specified.
+	return &swarm.Driver{
+		Name:    ldo.name,
+		Options: runconfigopts.ConvertKVStringsToMap(ldo.opts.GetAll()),
+	}
+}
+
 // ValidatePort validates a string is in the expected format for a port definition
 func ValidatePort(value string) (string, error) {
 	portMappings, err := nat.ParsePortSpec(value)
@@ -352,15 +390,15 @@ func ValidatePort(value string) (string, error) {
 }
 
 type serviceOptions struct {
-	name    string
-	labels  opts.ListOpts
-	image   string
-	command []string
-	args    []string
-	env     opts.ListOpts
-	workdir string
-	user    string
-	mounts  MountOpt
+	name            string
+	labels          opts.ListOpts
+	containerLabels opts.ListOpts
+	image           string
+	args            []string
+	env             opts.ListOpts
+	workdir         string
+	user            string
+	mounts          MountOpt
 
 	resources resourceOptions
 	stopGrace DurationOpt
@@ -373,15 +411,21 @@ type serviceOptions struct {
 	update        updateOptions
 	networks      []string
 	endpoint      endpointOptions
+
+	registryAuth bool
+
+	logDriver logDriverOptions
 }
 
 func newServiceOptions() *serviceOptions {
 	return &serviceOptions{
-		labels: opts.NewListOpts(runconfigopts.ValidateEnv),
-		env:    opts.NewListOpts(runconfigopts.ValidateEnv),
+		labels:          opts.NewListOpts(runconfigopts.ValidateEnv),
+		containerLabels: opts.NewListOpts(runconfigopts.ValidateEnv),
+		env:             opts.NewListOpts(runconfigopts.ValidateEnv),
 		endpoint: endpointOptions{
 			ports: opts.NewListOpts(ValidatePort),
 		},
+		logDriver: newLogDriverOptions(),
 	}
 }
 
@@ -396,9 +440,9 @@ func (opts *serviceOptions) ToService() (swarm.ServiceSpec, error) {
 		TaskTemplate: swarm.TaskSpec{
 			ContainerSpec: swarm.ContainerSpec{
 				Image:           opts.image,
-				Command:         opts.command,
 				Args:            opts.args,
 				Env:             opts.env.GetAll(),
+				Labels:          runconfigopts.ConvertKVStringsToMap(opts.containerLabels.GetAll()),
 				Dir:             opts.workdir,
 				User:            opts.user,
 				Mounts:          opts.mounts.Value(),
@@ -409,11 +453,13 @@ func (opts *serviceOptions) ToService() (swarm.ServiceSpec, error) {
 			Placement: &swarm.Placement{
 				Constraints: opts.constraints,
 			},
+			LogDriver: opts.logDriver.toLogDriver(),
 		},
 		Mode: swarm.ServiceMode{},
 		UpdateConfig: &swarm.UpdateConfig{
-			Parallelism: opts.update.parallelism,
-			Delay:       opts.update.delay,
+			Parallelism:   opts.update.parallelism,
+			Delay:         opts.update.delay,
+			FailureAction: opts.update.onFailure,
 		},
 		Networks:     convertNetworks(opts.networks),
 		EndpointSpec: opts.endpoint.ToEndpointSpec(),
@@ -436,17 +482,14 @@ func (opts *serviceOptions) ToService() (swarm.ServiceSpec, error) {
 	return service, nil
 }
 
-// addServiceFlags adds all flags that are common to both `create` and `update.
+// addServiceFlags adds all flags that are common to both `create` and `update`.
 // Any flags that are not common are added separately in the individual command
 func addServiceFlags(cmd *cobra.Command, opts *serviceOptions) {
 	flags := cmd.Flags()
 	flags.StringVar(&opts.name, flagName, "", "Service name")
-	flags.VarP(&opts.labels, flagLabel, "l", "Service labels")
 
-	flags.VarP(&opts.env, "env", "e", "Set environment variables")
 	flags.StringVarP(&opts.workdir, "workdir", "w", "", "Working directory inside the container")
 	flags.StringVarP(&opts.user, flagUser, "u", "", "Username or UID")
-	flags.VarP(&opts.mounts, flagMount, "m", "Attach a mount to the service")
 
 	flags.Var(&opts.resources.limitCPU, flagLimitCPU, "Limit CPUs")
 	flags.Var(&opts.resources.limitMemBytes, flagLimitMemory, "Limit Memory")
@@ -456,41 +499,61 @@ func addServiceFlags(cmd *cobra.Command, opts *serviceOptions) {
 
 	flags.Var(&opts.replicas, flagReplicas, "Number of tasks")
 
-	flags.StringVar(&opts.restartPolicy.condition, flagRestartCondition, "", "Restart when condition is met (none, on_failure, or any)")
+	flags.StringVar(&opts.restartPolicy.condition, flagRestartCondition, "", "Restart when condition is met (none, on-failure, or any)")
 	flags.Var(&opts.restartPolicy.delay, flagRestartDelay, "Delay between restart attempts")
 	flags.Var(&opts.restartPolicy.maxAttempts, flagRestartMaxAttempts, "Maximum number of restarts before giving up")
 	flags.Var(&opts.restartPolicy.window, flagRestartWindow, "Window used to evaluate the restart policy")
 
-	flags.StringSliceVar(&opts.constraints, flagConstraint, []string{}, "Placement constraints")
-
-	flags.Uint64Var(&opts.update.parallelism, flagUpdateParallelism, 0, "Maximum number of tasks updated simultaneously")
+	flags.Uint64Var(&opts.update.parallelism, flagUpdateParallelism, 1, "Maximum number of tasks updated simultaneously (0 to update all at once)")
 	flags.DurationVar(&opts.update.delay, flagUpdateDelay, time.Duration(0), "Delay between updates")
+	flags.StringVar(&opts.update.onFailure, flagUpdateFailureAction, "pause", "Action on update failure (pause|continue)")
 
-	flags.StringSliceVar(&opts.networks, flagNetwork, []string{}, "Network attachments")
-	flags.StringVar(&opts.endpoint.mode, flagEndpointMode, "", "Endpoint mode(Valid values: vip, dnsrr)")
-	flags.VarP(&opts.endpoint.ports, flagPublish, "p", "Publish a port as a node port")
+	flags.StringVar(&opts.endpoint.mode, flagEndpointMode, "", "Endpoint mode (vip or dnsrr)")
+
+	flags.BoolVar(&opts.registryAuth, flagRegistryAuth, false, "Send registry authentication details to swarm agents")
+
+	flags.StringVar(&opts.logDriver.name, flagLogDriver, "", "Logging driver for service")
+	flags.Var(&opts.logDriver.opts, flagLogOpt, "Logging driver options")
 }
 
 const (
-	flagConstraint         = "constraint"
-	flagEndpointMode       = "endpoint-mode"
-	flagLabel              = "label"
-	flagLimitCPU           = "limit-cpu"
-	flagLimitMemory        = "limit-memory"
-	flagMode               = "mode"
-	flagMount              = "mount"
-	flagName               = "name"
-	flagNetwork            = "network"
-	flagPublish            = "publish"
-	flagReplicas           = "replicas"
-	flagReserveCPU         = "reserve-cpu"
-	flagReserveMemory      = "reserve-memory"
-	flagRestartCondition   = "restart-condition"
-	flagRestartDelay       = "restart-delay"
-	flagRestartMaxAttempts = "restart-max-attempts"
-	flagRestartWindow      = "restart-window"
-	flagStopGracePeriod    = "stop-grace-period"
-	flagUpdateDelay        = "update-delay"
-	flagUpdateParallelism  = "update-parallelism"
-	flagUser               = "user"
+	flagConstraint           = "constraint"
+	flagConstraintRemove     = "constraint-rm"
+	flagConstraintAdd        = "constraint-add"
+	flagContainerLabel       = "container-label"
+	flagContainerLabelRemove = "container-label-rm"
+	flagContainerLabelAdd    = "container-label-add"
+	flagEndpointMode         = "endpoint-mode"
+	flagEnv                  = "env"
+	flagEnvRemove            = "env-rm"
+	flagEnvAdd               = "env-add"
+	flagLabel                = "label"
+	flagLabelRemove          = "label-rm"
+	flagLabelAdd             = "label-add"
+	flagLimitCPU             = "limit-cpu"
+	flagLimitMemory          = "limit-memory"
+	flagMode                 = "mode"
+	flagMount                = "mount"
+	flagMountRemove          = "mount-rm"
+	flagMountAdd             = "mount-add"
+	flagName                 = "name"
+	flagNetwork              = "network"
+	flagPublish              = "publish"
+	flagPublishRemove        = "publish-rm"
+	flagPublishAdd           = "publish-add"
+	flagReplicas             = "replicas"
+	flagReserveCPU           = "reserve-cpu"
+	flagReserveMemory        = "reserve-memory"
+	flagRestartCondition     = "restart-condition"
+	flagRestartDelay         = "restart-delay"
+	flagRestartMaxAttempts   = "restart-max-attempts"
+	flagRestartWindow        = "restart-window"
+	flagStopGracePeriod      = "stop-grace-period"
+	flagUpdateDelay          = "update-delay"
+	flagUpdateFailureAction  = "update-failure-action"
+	flagUpdateParallelism    = "update-parallelism"
+	flagUser                 = "user"
+	flagRegistryAuth         = "with-registry-auth"
+	flagLogDriver            = "log-driver"
+	flagLogOpt               = "log-opt"
 )

@@ -1,19 +1,19 @@
-<!--[metadata]>
-+++
-title = "rename"
-description = "The rename command description and usage"
-keywords = ["rename, docker, container"]
-[menu.main]
-parent = "smn_cli"
-+++
-<![end-metadata]-->
+---
+redirect_from:
+  - /reference/commandline/rename/
+description: The rename command description and usage
+keywords:
+- rename, docker, container
+title: docker rename
+---
 
-# rename
+```markdown
+Usage:  docker rename CONTAINER NEW_NAME
 
-    Usage: docker rename [OPTIONS] OLD_NAME NEW_NAME
+Rename a container
 
-    Rename a container
-
-      --help          Print usage
+Options:
+      --help   Print usage
+```
 
 The `docker rename` command allows the container to be renamed to a different name.

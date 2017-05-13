@@ -24,6 +24,8 @@ type GlobalOrchestrator struct {
 
 	updater  *UpdateSupervisor
 	restarts *RestartSupervisor
+
+	cluster *api.Cluster // local instance of the cluster
 }
 
 // NewGlobalOrchestrator creates a new GlobalOrchestrator
@@ -50,11 +52,23 @@ func (g *GlobalOrchestrator) Run(ctx context.Context) error {
 	watcher, cancel := queue.Watch()
 	defer cancel()
 
+	// lookup the cluster
+	var err error
+	g.store.View(func(readTx store.ReadTx) {
+		var clusters []*api.Cluster
+		clusters, err = store.FindClusters(readTx, store.ByName("default"))
+
+		if len(clusters) != 1 {
+			return // just pick up the cluster when it is created.
+		}
+		g.cluster = clusters[0]
+	})
+	if err != nil {
+		return err
+	}
+
 	// Get list of nodes
-	var (
-		nodes []*api.Node
-		err   error
-	)
+	var nodes []*api.Node
 	g.store.View(func(readTx store.ReadTx) {
 		nodes, err = store.FindNodes(readTx, store.All)
 	})
@@ -88,6 +102,8 @@ func (g *GlobalOrchestrator) Run(ctx context.Context) error {
 		case event := <-watcher:
 			// TODO(stevvooe): Use ctx to limit running time of operation.
 			switch v := event.(type) {
+			case state.EventUpdateCluster:
+				g.cluster = v.Cluster
 			case state.EventCreateService:
 				if !isGlobalService(v.Service) {
 					continue
@@ -209,8 +225,8 @@ func (g *GlobalOrchestrator) reconcileOneService(ctx context.Context, service *a
 		}
 	}
 
+	var updateTasks []*api.Task
 	_, err = g.store.Batch(func(batch *store.Batch) error {
-		var updateTasks []*api.Task
 		for nodeID := range g.nodes {
 			ntasks := nodeTasks[nodeID]
 			// if restart policy considers this node has finished its task
@@ -227,13 +243,14 @@ func (g *GlobalOrchestrator) reconcileOneService(ctx context.Context, service *a
 				g.removeTasks(ctx, batch, service, ntasks[1:])
 			}
 		}
-		if len(updateTasks) > 0 {
-			g.updater.Update(ctx, service, updateTasks)
-		}
 		return nil
 	})
 	if err != nil {
 		log.G(ctx).WithError(err).Errorf("global orchestrator: reconcileOneService transaction failed")
+	}
+
+	if len(updateTasks) > 0 {
+		g.updater.Update(ctx, g.cluster, service, updateTasks)
 	}
 }
 
@@ -255,7 +272,7 @@ func (g *GlobalOrchestrator) reconcileOneNode(ctx context.Context, node *api.Nod
 		return
 	}
 	// typically there are only a few global services on a node
-	// iterate thru all of them one by one. If raft store visits become a concern,
+	// iterate through all of them one by one. If raft store visits become a concern,
 	// it can be optimized.
 	for _, service := range g.globalServices {
 		g.reconcileServiceOneNode(ctx, service.ID, node.ID)
@@ -325,7 +342,7 @@ func (g *GlobalOrchestrator) reconcileServiceOneNode(ctx context.Context, servic
 }
 
 // restartTask calls the restart supervisor's Restart function, which
-// sets a task's desired state to dead and restarts it if the restart
+// sets a task's desired state to shutdown and restarts it if the restart
 // policy calls for it to be restarted.
 func (g *GlobalOrchestrator) restartTask(ctx context.Context, taskID string, serviceID string) {
 	err := g.store.Update(func(tx store.Tx) error {
@@ -337,7 +354,7 @@ func (g *GlobalOrchestrator) restartTask(ctx context.Context, taskID string, ser
 		if service == nil {
 			return nil
 		}
-		return g.restarts.Restart(ctx, tx, service, *t)
+		return g.restarts.Restart(ctx, tx, g.cluster, service, *t)
 	})
 	if err != nil {
 		log.G(ctx).WithError(err).Errorf("global orchestrator: restartTask transaction failed")
@@ -361,7 +378,7 @@ func (g *GlobalOrchestrator) removeTask(ctx context.Context, batch *store.Batch,
 }
 
 func (g *GlobalOrchestrator) addTask(ctx context.Context, batch *store.Batch, service *api.Service, nodeID string) {
-	task := newTask(service, 0)
+	task := newTask(g.cluster, service, 0)
 	task.NodeID = nodeID
 
 	err := batch.Update(func(tx store.Tx) error {

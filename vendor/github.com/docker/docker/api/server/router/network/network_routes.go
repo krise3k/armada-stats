@@ -2,11 +2,13 @@ package network
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"golang.org/x/net/context"
 
 	"github.com/docker/docker/api/server/httputils"
+	"github.com/docker/docker/errors"
 	"github.com/docker/engine-api/types"
 	"github.com/docker/engine-api/types/filters"
 	"github.com/docker/engine-api/types/network"
@@ -81,6 +83,10 @@ func (n *networkRouter) postNetworkCreate(ctx context.Context, w http.ResponseWr
 		return err
 	}
 
+	if _, err := n.clusterProvider.GetNetwork(create.Name); err == nil {
+		return libnetwork.NetworkNameError(create.Name)
+	}
+
 	nw, err := n.backend.CreateNetwork(create)
 	if err != nil {
 		if _, ok := err.(libnetwork.ManagerRedirectError); !ok {
@@ -115,6 +121,11 @@ func (n *networkRouter) postNetworkConnect(ctx context.Context, w http.ResponseW
 		return err
 	}
 
+	if nw.Info().Dynamic() {
+		err := fmt.Errorf("operation not supported for swarm scoped networks")
+		return errors.NewRequestForbiddenError(err)
+	}
+
 	return n.backend.ConnectContainerToNetwork(connect.Container, nw.Name(), connect.EndpointConfig)
 }
 
@@ -137,6 +148,11 @@ func (n *networkRouter) postNetworkDisconnect(ctx context.Context, w http.Respon
 		return err
 	}
 
+	if nw.Info().Dynamic() {
+		err := fmt.Errorf("operation not supported for swarm scoped networks")
+		return errors.NewRequestForbiddenError(err)
+	}
+
 	return n.backend.DisconnectContainerFromNetwork(disconnect.Container, nw, disconnect.Force)
 }
 
@@ -145,7 +161,11 @@ func (n *networkRouter) deleteNetwork(ctx context.Context, w http.ResponseWriter
 		return err
 	}
 	if _, err := n.clusterProvider.GetNetwork(vars["id"]); err == nil {
-		return n.clusterProvider.RemoveNetwork(vars["id"])
+		if err = n.clusterProvider.RemoveNetwork(vars["id"]); err != nil {
+			return err
+		}
+		w.WriteHeader(http.StatusNoContent)
+		return nil
 	}
 	if err := n.backend.DeleteNetwork(vars["id"]); err != nil {
 		return err
@@ -244,6 +264,9 @@ func buildIpamResources(r *types.NetworkResource, nwInfo libnetwork.NetworkInfo)
 
 	if !hasIpv6Conf {
 		for _, ip6Info := range ipv6Info {
+			if ip6Info.IPAMData.Pool == nil {
+				continue
+			}
 			iData := network.IPAMConfig{}
 			iData.Subnet = ip6Info.IPAMData.Pool.String()
 			iData.Gateway = ip6Info.IPAMData.Gateway.String()

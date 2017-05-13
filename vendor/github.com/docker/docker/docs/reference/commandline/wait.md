@@ -1,17 +1,17 @@
-<!--[metadata]>
-+++
-title = "wait"
-description = "The wait command description and usage"
-keywords = ["container, stop, wait"]
-[menu.main]
-parent = "smn_cli"
-+++
-<![end-metadata]-->
+---
+redirect_from:
+  - /reference/commandline/wait/
+description: The wait command description and usage
+keywords:
+- container, stop, wait
+title: docker wait
+---
 
-# wait
+```markdown
+Usage:  docker wait CONTAINER [CONTAINER...]
 
-    Usage: docker wait [OPTIONS] CONTAINER [CONTAINER...]
+Block until a container stops, then print its exit code
 
-    Block until a container stops, then print its exit code.
-
-      --help          Print usage
+Options:
+      --help   Print usage
+```

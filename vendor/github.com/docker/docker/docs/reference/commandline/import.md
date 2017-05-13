@@ -1,24 +1,22 @@
-<!--[metadata]>
-+++
-title = "import"
-description = "The import command description and usage"
-keywords = ["import, file, system, container"]
-[menu.main]
-parent = "smn_cli"
-+++
-<![end-metadata]-->
+---
+redirect_from:
+  - /reference/commandline/import/
+description: The import command description and usage
+keywords:
+- import, file, system, container
+title: docker import
+---
 
-# import
+```markdown
+Usage:  docker import [OPTIONS] file|URL|- [REPOSITORY[:TAG]]
 
-    Usage: docker import file|URL|- [REPOSITORY[:TAG]]
+Import the contents from a tarball to create a filesystem image
 
-    Create an empty filesystem image and import the contents of the
-	tarball (.tar, .tar.gz, .tgz, .bzip, .tar.xz, .txz) into it, then
-	optionally tag it.
-
-      -c, --change=[]     Apply specified Dockerfile instructions while importing the image
-      --help              Print usage
-      -m, --message=      Set commit message for imported image
+Options:
+  -c, --change value     Apply Dockerfile instruction to the created image (default [])
+      --help             Print usage
+  -m, --message string   Set commit message for imported image
+```
 
 You can specify a `URL` or `-` (dash) to take data directly from `STDIN`. The
 `URL` can point to an archive (.tar, .tar.gz, .tgz, .bzip, .tar.xz, or .txz)

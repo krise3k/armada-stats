@@ -108,10 +108,10 @@ type Command struct {
 
 	flagErrorBuf *bytes.Buffer
 
-	args          []string             // actual args parsed from flags
-	output        *io.Writer           // nil means stderr; use Out() method instead
-	usageFunc     func(*Command) error // Usage can be defined by application
-	usageTemplate string               // Can be defined by Application
+	args          []string                 // actual args parsed from flags
+	output        *io.Writer               // nil means stderr; use Out() method instead
+	usageFunc     func(*Command) error     // Usage can be defined by application
+	usageTemplate string                   // Can be defined by Application
 	flagErrorFunc func(*Command, error) error
 	helpTemplate  string                   // Can be defined by Application
 	helpFunc      func(*Command, []string) // Help can be defined by application

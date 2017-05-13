@@ -1,24 +1,24 @@
-<!--[metadata]>
-+++
-title = "plugin rm"
-description = "the plugin rm command description and usage"
-keywords = ["plugin, rm"]
-advisory = "experimental"
-[menu.main]
-parent = "smn_cli"
-+++
-<![end-metadata]-->
+---
+redirect_from:
+  - /reference/commandline/plugin_rm/
+advisory: experimental
+description: the plugin rm command description and usage
+keywords:
+- plugin, rm
+title: docker plugin rm (experimental)
+---
 
-# plugin rm (experimental)
+```markdown
+Usage:  docker plugin rm PLUGIN
 
-    Usage: docker plugin rm PLUGIN
+Remove one or more plugins
 
-    Remove a plugin
+Aliases:
+  rm, remove
 
-      --help             Print usage
-
-    Aliases:
-      rm, remove
+Options:
+      --help   Print usage
+```
 
 Removes a plugin. You cannot remove a plugin if it is active, you must disable
 a plugin using the [`docker plugin disable`](plugin_disable.md) before removing
@@ -27,9 +27,11 @@ it.
 The following example disables and removes the `no-remove:latest` plugin;
 
 ```bash
-$ docker plugin disable tiborvass/no-remove:latest
+$ docker plugin disable tiborvass/no-remove
+tiborvass/no-remove
+
 $ docker plugin rm tiborvass/no-remove:latest
-no-remove:latest
+tiborvass/no-remove
 ```
 
 ## Related information

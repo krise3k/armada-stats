@@ -1,29 +1,30 @@
-<!--[metadata]>
-+++
-title = "images"
-description = "The images command description and usage"
-keywords = ["list, docker, images"]
-[menu.main]
-parent = "smn_cli"
-+++
-<![end-metadata]-->
+---
+redirect_from:
+  - /reference/commandline/images/
+description: The images command description and usage
+keywords:
+- list, docker, images
+title: docker images
+---
 
-# images
+```markdown
+Usage:  docker images [OPTIONS] [REPOSITORY[:TAG]]
 
-    Usage: docker images [OPTIONS] [REPOSITORY[:TAG]]
+List images
 
-    List images
-
-      -a, --all            Show all images (default hides intermediate images)
-      --digests            Show digests
-      -f, --filter=[]      Filter output based on these conditions:
-                           - dangling=(true|false)
-                           - label=<key> or label=<key>=<value>
-                           - before=(<image-name>[:tag]|<image-id>|<image@digest>)
-                           - since=(<image-name>[:tag]|<image-id>|<image@digest>)
-      --help               Print usage
-      --no-trunc           Don't truncate output
-      -q, --quiet          Only show numeric IDs
+Options:
+  -a, --all             Show all images (default hides intermediate images)
+      --digests         Show digests
+  -f, --filter value    Filter output based on conditions provided (default [])
+                        - dangling=(true|false)
+                        - label=<key> or label=<key>=<value>
+                        - before=(<image-name>[:tag]|<image-id>|<image@digest>)
+                        - since=(<image-name>[:tag]|<image-id>|<image@digest>)
+      --format string   Pretty-print images using a Go template
+      --help            Print usage
+      --no-trunc        Don't truncate output
+  -q, --quiet           Only show numeric IDs
+```
 
 The default `docker images` will show all top level
 images, their repository and tags, and their size.
@@ -245,6 +246,7 @@ output the data exactly as the template declares or, when using the
 The following example uses a template without headers and outputs the
 `ID` and `Repository` entries separated by a colon for all images:
 
+    {% raw %}
     $ docker images --format "{{.ID}}: {{.Repository}}"
     77af4d6b9913: <none>
     b6fa739cedf5: committ
@@ -255,10 +257,12 @@ The following example uses a template without headers and outputs the
     746b819f315e: postgres
     746b819f315e: postgres
     746b819f315e: postgres
+    {% endraw %}
 
 To list all images with their repository and tag in a table format you
 can use:
 
+    {% raw %}
     $ docker images --format "table {{.ID}}\t{{.Repository}}\t{{.Tag}}"
     IMAGE ID            REPOSITORY                TAG
     77af4d6b9913        <none>                    <none>
@@ -270,3 +274,4 @@ can use:
     746b819f315e        postgres                  9.3
     746b819f315e        postgres                  9.3.5
     746b819f315e        postgres                  latest
+    {% endraw %}

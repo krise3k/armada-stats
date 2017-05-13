@@ -1,22 +1,27 @@
-<!--[metadata]>
-+++
-title = "cp"
-description = "The cp command description and usage"
-keywords = ["copy, container, files, folders"]
-[menu.main]
-parent = "smn_cli"
-+++
-<![end-metadata]-->
+---
+redirect_from:
+  - /reference/commandline/cp/
+description: The cp command description and usage
+keywords:
+- copy, container, files, folders
+title: docker cp
+---
 
-# cp
+```markdown
+Usage:  docker cp [OPTIONS] CONTAINER:SRC_PATH DEST_PATH|-
+        docker cp [OPTIONS] SRC_PATH|- CONTAINER:DEST_PATH
 
-    Usage: docker cp [OPTIONS] CONTAINER:SRC_PATH DEST_PATH | -
-           docker cp [OPTIONS] SRC_PATH | - CONTAINER:DEST_PATH
+Copy files/folders between a container and the local filesystem
 
-    Copy files/folders between a container and the local filesystem
+Use '-' as the source to read a tar archive from stdin
+and extract it to a directory destination in a container.
+Use '-' as the destination to stream a tar archive of a
+container source to stdout.
 
-      -L, --follow-link          Always follow symbol link in SRC_PATH
-      --help                     Print usage
+Options:
+  -L, --follow-link   Always follow symbol link in SRC_PATH
+      --help          Print usage
+```
 
 The `docker cp` utility copies the contents of `SRC_PATH` to the `DEST_PATH`.
 You can copy from the container's file system to the local machine or the
@@ -25,7 +30,7 @@ either the `SRC_PATH` or `DEST_PATH`, you can also stream a tar archive from
 `STDIN` or to `STDOUT`. The `CONTAINER` can be a running or stopped container.
 The `SRC_PATH` or `DEST_PATH` can be a file or directory.
 
-The `docker cp` command assumes container paths are relative to the container's 
+The `docker cp` command assumes container paths are relative to the container's
 `/` (root) directory. This means supplying the initial forward slash is optional;
 The command sees `compassionate_darwin:/tmp/foo/myfile.txt` and
 `compassionate_darwin:tmp/foo/myfile.txt` as identical. Local machine paths can
@@ -70,7 +75,7 @@ argument of `DEST_PATH`, the behavior is as follows:
 
 The command requires `SRC_PATH` and `DEST_PATH` to exist according to the above
 rules. If `SRC_PATH` is local and is a symbolic link, the symbolic link, not
-the target, is copied by default. To copy the link target and not the link, specify 
+the target, is copied by default. To copy the link target and not the link, specify
 the `-L` option.
 
 A colon (`:`) is used as a delimiter between `CONTAINER` and its path. You can

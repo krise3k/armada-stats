@@ -1,20 +1,18 @@
-<!--[metadata]>
-+++
-title = "service rm"
-description = "The service rm command description and usage"
-keywords = ["service, rm"]
-advisory = "rc"
-[menu.main]
-parent = "smn_cli"
-+++
-<![end-metadata]-->
+---
+redirect_from:
+  - /reference/commandline/service_rm/
+description: The service rm command description and usage
+keywords:
+- service, rm
+title: docker service rm
+---
 
-# service rm
+**Warning:** this command is part of the Swarm management feature introduced in Docker 1.12, and might be subject to non backward-compatible changes.
 
 ```Markdown
-Usage:	docker service rm [OPTIONS] SERVICE
+Usage:	docker service rm [OPTIONS] SERVICE [SERVICE...]
 
-Remove a service
+Remove one or more services
 
 Aliases:
   rm, remove
@@ -46,5 +44,5 @@ ID            NAME   SCALE  IMAGE        COMMAND
 * [service inspect](service_inspect.md)
 * [service ls](service_ls.md)
 * [service scale](service_scale.md)
-* [service tasks](service_tasks.md)
+* [service ps](service_ps.md)
 * [service update](service_update.md)

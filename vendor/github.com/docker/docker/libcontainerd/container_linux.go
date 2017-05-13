@@ -6,13 +6,16 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"sync"
 	"syscall"
 	"time"
 
 	"github.com/Sirupsen/logrus"
 	containerd "github.com/docker/containerd/api/grpc/types"
+	"github.com/docker/docker/pkg/ioutils"
 	"github.com/docker/docker/restartmanager"
-	"github.com/opencontainers/specs/specs-go"
+	specs "github.com/opencontainers/specs/specs-go"
+	"github.com/tonistiigi/fifo"
 	"golang.org/x/net/context"
 )
 
@@ -66,8 +69,8 @@ func (ctr *container) clean() error {
 func (ctr *container) cleanProcess(id string) {
 	if p, ok := ctr.processes[id]; ok {
 		for _, i := range []int{syscall.Stdin, syscall.Stdout, syscall.Stderr} {
-			if err := os.Remove(p.fifo(i)); err != nil {
-				logrus.Warnf("failed to remove %v for process %v: %v", p.fifo(i), id, err)
+			if err := os.Remove(p.fifo(i)); err != nil && !os.IsNotExist(err) {
+				logrus.Warnf("libcontainerd: failed to remove %v for process %v: %v", p.fifo(i), id, err)
 			}
 		}
 	}
@@ -86,15 +89,47 @@ func (ctr *container) spec() (*specs.Spec, error) {
 	return &spec, nil
 }
 
-func (ctr *container) start() error {
+func (ctr *container) start(attachStdio StdioCallback) error {
 	spec, err := ctr.spec()
 	if err != nil {
 		return nil
 	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	ready := make(chan struct{})
+
 	iopipe, err := ctr.openFifos(spec.Process.Terminal)
 	if err != nil {
 		return err
 	}
+
+	var stdinOnce sync.Once
+
+	// we need to delay stdin closure after container start or else "stdin close"
+	// event will be rejected by containerd.
+	// stdin closure happens in attachStdio
+	stdin := iopipe.Stdin
+	iopipe.Stdin = ioutils.NewWriteCloserWrapper(stdin, func() error {
+		var err error
+		stdinOnce.Do(func() { // on error from attach we don't know if stdin was already closed
+			err = stdin.Close()
+			go func() {
+				select {
+				case <-ready:
+				case <-ctx.Done():
+				}
+				select {
+				case <-ready:
+					if err := ctr.sendCloseStdin(); err != nil {
+						logrus.Warnf("failed to close stdin: %+v", err)
+					}
+				default:
+				}
+			}()
+		})
+		return err
+	})
 
 	r := &containerd.CreateContainerRequest{
 		Id:         ctr.containerID,
@@ -109,17 +144,19 @@ func (ctr *container) start() error {
 	}
 	ctr.client.appendContainer(ctr)
 
+	if err := attachStdio(*iopipe); err != nil {
+		ctr.closeFifos(iopipe)
+		return err
+	}
+
 	resp, err := ctr.client.remote.apiClient.CreateContainer(context.Background(), r)
 	if err != nil {
 		ctr.closeFifos(iopipe)
 		return err
 	}
 	ctr.startedAt = time.Now()
-
-	if err := ctr.client.backend.AttachStreams(ctr.containerID, *iopipe); err != nil {
-		return err
-	}
 	ctr.systemPid = systemPid(resp.Container)
+	close(ready)
 
 	return ctr.client.backend.StateChanged(ctr.containerID, StateInfo{
 		CommonStateInfo: CommonStateInfo{
@@ -144,6 +181,7 @@ func (ctr *container) handleEvent(e *containerd.Event) error {
 	defer ctr.client.unlock(ctr.containerID)
 	switch e.Type {
 	case StateExit, StatePause, StateResume, StateOOM:
+		var waitRestart chan error
 		st := StateInfo{
 			CommonStateInfo: CommonStateInfo{
 				State:    e.Type,
@@ -161,31 +199,12 @@ func (ctr *container) handleEvent(e *containerd.Event) error {
 		if st.State == StateExit && ctr.restartManager != nil {
 			restart, wait, err := ctr.restartManager.ShouldRestart(e.Status, false, time.Since(ctr.startedAt))
 			if err != nil {
-				logrus.Warnf("container %s %v", ctr.containerID, err)
+				logrus.Warnf("libcontainerd: container %s %v", ctr.containerID, err)
 			} else if restart {
 				st.State = StateRestart
 				ctr.restarting = true
 				ctr.client.deleteContainer(e.Id)
-				go func() {
-					err := <-wait
-					ctr.client.lock(ctr.containerID)
-					defer ctr.client.unlock(ctr.containerID)
-					ctr.restarting = false
-					if err != nil {
-						st.State = StateExit
-						ctr.clean()
-						ctr.client.q.append(e.Id, func() {
-							if err := ctr.client.backend.StateChanged(e.Id, st); err != nil {
-								logrus.Error(err)
-							}
-						})
-						if err != restartmanager.ErrRestartCanceled {
-							logrus.Error(err)
-						}
-					} else {
-						ctr.start()
-					}
-				}()
+				waitRestart = wait
 			}
 		}
 
@@ -200,8 +219,34 @@ func (ctr *container) handleEvent(e *containerd.Event) error {
 		}
 		ctr.client.q.append(e.Id, func() {
 			if err := ctr.client.backend.StateChanged(e.Id, st); err != nil {
-				logrus.Error(err)
+				logrus.Errorf("libcontainerd: backend.StateChanged(): %v", err)
 			}
+			if st.State == StateRestart {
+				go func() {
+					err := <-waitRestart
+					ctr.client.lock(ctr.containerID)
+					defer ctr.client.unlock(ctr.containerID)
+					ctr.restarting = false
+					if err == nil {
+						if err = ctr.start(ctr.attachStdio); err != nil {
+							logrus.Errorf("libcontainerd: error restarting %v", err)
+						}
+					}
+					if err != nil {
+						st.State = StateExit
+						ctr.clean()
+						ctr.client.q.append(e.Id, func() {
+							if err := ctr.client.backend.StateChanged(e.Id, st); err != nil {
+								logrus.Errorf("libcontainerd: %v", err)
+							}
+						})
+						if err != restartmanager.ErrRestartCanceled {
+							logrus.Errorf("libcontainerd: %v", err)
+						}
+					}
+				}()
+			}
+
 			if e.Type == StatePause || e.Type == StateResume {
 				ctr.pauseMonitor.handle(e.Type)
 			}
@@ -213,7 +258,7 @@ func (ctr *container) handleEvent(e *containerd.Event) error {
 		})
 
 	default:
-		logrus.Debugf("event unhandled: %+v", e)
+		logrus.Debugf("libcontainerd: event unhandled: %+v", e)
 	}
 	return nil
 }
@@ -221,14 +266,15 @@ func (ctr *container) handleEvent(e *containerd.Event) error {
 // discardFifos attempts to fully read the container fifos to unblock processes
 // that may be blocked on the writer side.
 func (ctr *container) discardFifos() {
+	ctx, _ := context.WithTimeout(context.Background(), 3*time.Second)
 	for _, i := range []int{syscall.Stdout, syscall.Stderr} {
-		f := ctr.fifo(i)
-		c := make(chan struct{})
+		f, err := fifo.OpenFifo(ctx, ctr.fifo(i), syscall.O_RDONLY|syscall.O_NONBLOCK, 0)
+		if err != nil {
+			logrus.Warnf("error opening fifo %v for discarding: %+v", f, err)
+			continue
+		}
 		go func() {
-			close(c) // this channel is used to not close the writer too early, before readonly open has been called.
-			io.Copy(ioutil.Discard, openReaderFromFifo(f))
+			io.Copy(ioutil.Discard, f)
 		}()
-		<-c
-		closeReaderFifo(f) // avoid blocking permanently on open if there is no writer side
 	}
 }

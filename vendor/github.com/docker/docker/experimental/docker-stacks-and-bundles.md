@@ -41,11 +41,12 @@ A stack is created using the `docker deploy` command:
 
 Usage:  docker deploy [OPTIONS] STACK
 
-Create and update a stack
+Create and update a stack from a Distributed Application Bundle (DAB)
 
 Options:
-  -f, --bundle string   Path to a bundle (Default: STACK.dab)
-      --help            Print usage
+      --file   string        Path to a Distributed Application Bundle file (Default: STACK.dab)
+      --help                 Print usage
+      --with-registry-auth   Send registry authentication details to Swarm agents
 ```
 
 Let's deploy the stack created before:
@@ -77,7 +78,7 @@ axqh55ipl40h  vossibility-stack_vossibility-collector  1 icecrime/vossibility-co
 
 ## Managing stacks
 
-Tasks are managed using the `docker stack` command:
+Stacks are managed using the `docker stack` command:
 
 ```bash
 # docker stack --help

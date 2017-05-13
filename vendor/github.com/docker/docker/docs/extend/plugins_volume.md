@@ -1,19 +1,13 @@
-<!--[metadata]>
-+++
-title = "Volume plugins"
-description = "How to manage data with external volume plugins"
-keywords = ["Examples, Usage, volume, docker, data, volumes, plugin, api"]
-[menu.main]
-parent = "engine_extend"
-+++
-<![end-metadata]-->
-
-# Write a volume plugin
+---
+title: "Write a volume driver plugin"
+description: "How to manage data with external volume plugins"
+keywords: ["Examples, Usage, volume, docker, data, volumes, plugin, api"]
+---
 
 Docker Engine volume plugins enable Engine deployments to be integrated with
 external storage systems, such as Amazon EBS, and enable data volumes to persist
-beyond the lifetime of a single Engine host. See the [plugin
-documentation](plugins.md) for more information.
+beyond the lifetime of a single Engine host. See the
+[plugin documentation](legacy_plugins.md) for more information.
 
 ## Changelog
 
@@ -126,7 +120,7 @@ name. This is called once per container start. If the same volume_name is reques
 more than once, the plugin may need to keep track of each new mount request and provision
 at the first mount request and deprovision at the last corresponding unmount request.
 
-`ID` is a unqiue ID for the caller that is requesting the mount.
+`ID` is a unique ID for the caller that is requesting the mount.
 
 **Response**:
 ```json
@@ -176,7 +170,7 @@ Indication that Docker no longer is using the named volume. This is called once
 per container stop.  Plugin may deduce that it is safe to deprovision it at
 this point.
 
-`ID` is a unqiue ID for the caller that is requesting the mount.
+`ID` is a unique ID for the caller that is requesting the mount.
 
 **Response**:
 ```json

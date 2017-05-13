@@ -7,6 +7,7 @@ package keymanager
 // plane information. It can also be used to encrypt overlay data traffic.
 import (
 	"crypto/rand"
+	"encoding/binary"
 	"fmt"
 	"sync"
 	"time"
@@ -32,6 +33,8 @@ const (
 
 	// DefaultSubsystem is gossip
 	DefaultSubsystem = SubsystemGossip
+	// number of keys to mainrain in the key ring.
+	keyringSize = 3
 )
 
 // map of subsystems and corresponding encryption algorithm. Initially only
@@ -59,7 +62,6 @@ type KeyManager struct {
 	config  *Config
 	store   *store.MemoryStore
 	keyRing *keyRing
-	ticker  *time.Ticker
 	ctx     context.Context
 	cancel  context.CancelFunc
 
@@ -72,7 +74,7 @@ func DefaultConfig() *Config {
 		ClusterName:      store.DefaultClusterName,
 		Keylen:           DefaultKeyLen,
 		RotationInterval: DefaultKeyRotationInterval,
-		Subsystems:       []string{DefaultSubsystem},
+		Subsystems:       []string{SubsystemGossip, SubsystemIPSec},
 	}
 }
 
@@ -86,7 +88,7 @@ func New(store *store.MemoryStore, config *Config) *KeyManager {
 	return &KeyManager{
 		config:  config,
 		store:   store,
-		keyRing: &keyRing{},
+		keyRing: &keyRing{lClock: genSkew()},
 	}
 }
 
@@ -148,7 +150,7 @@ func (k *KeyManager) rotateKey(ctx context.Context) error {
 	// We maintain the latest key and the one before in the key ring to allow
 	// agents to communicate without disruption on key change.
 	for subsys, keys := range subsysKeys {
-		if len(keys) > 1 {
+		if len(keys) == keyringSize {
 			min := 0
 			for i, key := range keys[1:] {
 				if key.LamportTime < keys[min].LamportTime {
@@ -189,7 +191,9 @@ func (k *KeyManager) Run(ctx context.Context) error {
 	cluster := clusters[0]
 	if len(cluster.NetworkBootstrapKeys) == 0 {
 		for _, subsys := range k.config.Subsystems {
-			k.keyRing.keys = append(k.keyRing.keys, k.allocateKey(ctx, subsys))
+			for i := 0; i < keyringSize; i++ {
+				k.keyRing.keys = append(k.keyRing.keys, k.allocateKey(ctx, subsys))
+			}
 		}
 		if err := k.updateKey(cluster); err != nil {
 			log.Errorf("store update failed %v", err)
@@ -226,4 +230,13 @@ func (k *KeyManager) Stop() error {
 	}
 	k.cancel()
 	return nil
+}
+
+// genSkew generates a random uint64 number between 0 and 65535
+func genSkew() uint64 {
+	b := make([]byte, 2)
+	if _, err := rand.Read(b); err != nil {
+		panic(err)
+	}
+	return uint64(binary.BigEndian.Uint16(b))
 }

@@ -14,11 +14,13 @@ import (
 
 	"github.com/Sirupsen/logrus"
 	"github.com/docker/swarmkit/api"
+	"github.com/docker/swarmkit/api/equality"
 	"github.com/docker/swarmkit/ca"
 	"github.com/docker/swarmkit/log"
 	"github.com/docker/swarmkit/manager/state"
 	"github.com/docker/swarmkit/manager/state/store"
 	"github.com/docker/swarmkit/manager/state/watch"
+	"github.com/docker/swarmkit/picker"
 	"github.com/docker/swarmkit/protobuf/ptypes"
 	"golang.org/x/net/context"
 )
@@ -29,6 +31,7 @@ const (
 	DefaultHeartBeatPeriod       = 5 * time.Second
 	defaultHeartBeatEpsilon      = 500 * time.Millisecond
 	defaultGracePeriodMultiplier = 3
+	defaultRateLimitPeriod       = 8 * time.Second
 
 	// maxBatchItems is the threshold of queued writes that should
 	// trigger an actual transaction to commit them to the shared store.
@@ -51,7 +54,7 @@ var (
 	// ErrSessionInvalid returned when the session in use is no longer valid.
 	// The node should re-register and start a new session.
 	ErrSessionInvalid = errors.New("session invalid")
-	// ErrNodeNotFound returned when the Node doesn't exists in raft.
+	// ErrNodeNotFound returned when the Node doesn't exist in raft.
 	ErrNodeNotFound = errors.New("node not found")
 )
 
@@ -59,9 +62,12 @@ var (
 // DefautConfig.
 type Config struct {
 	// Addr configures the address the dispatcher reports to agents.
-	Addr                  string
-	HeartbeatPeriod       time.Duration
-	HeartbeatEpsilon      time.Duration
+	Addr             string
+	HeartbeatPeriod  time.Duration
+	HeartbeatEpsilon time.Duration
+	// RateLimitPeriod specifies how often node with same ID can try to register
+	// new session.
+	RateLimitPeriod       time.Duration
 	GracePeriodMultiplier int
 }
 
@@ -70,6 +76,7 @@ func DefaultConfig() *Config {
 	return &Config{
 		HeartbeatPeriod:       DefaultHeartBeatPeriod,
 		HeartbeatEpsilon:      defaultHeartBeatEpsilon,
+		RateLimitPeriod:       defaultRateLimitPeriod,
 		GracePeriodMultiplier: defaultGracePeriodMultiplier,
 	}
 }
@@ -116,12 +123,11 @@ func (b weightedPeerByNodeID) Swap(i, j int) { b[i], b[j] = b[j], b[i] }
 func New(cluster Cluster, c *Config) *Dispatcher {
 	return &Dispatcher{
 		addr:                      c.Addr,
-		nodes:                     newNodeStore(c.HeartbeatPeriod, c.HeartbeatEpsilon, c.GracePeriodMultiplier),
+		nodes:                     newNodeStore(c.HeartbeatPeriod, c.HeartbeatEpsilon, c.GracePeriodMultiplier, c.RateLimitPeriod),
 		store:                     cluster.MemoryStore(),
 		cluster:                   cluster,
 		mgrQueue:                  watch.NewQueue(16),
 		keyMgrQueue:               watch.NewQueue(16),
-		lastSeenManagers:          getWeightedPeers(cluster),
 		taskUpdates:               make(map[string]*api.TaskStatus),
 		processTaskUpdatesTrigger: make(chan struct{}, 1),
 		config: c,
@@ -137,7 +143,11 @@ func getWeightedPeers(cluster Cluster) []*api.WeightedPeer {
 				NodeID: m.NodeID,
 				Addr:   m.Addr,
 			},
-			Weight: 1,
+
+			// TODO(stevvooe): Calculate weight of manager selection based on
+			// cluster-level observations, such as number of connections and
+			// load.
+			Weight: picker.DefaultObservationWeight,
 		})
 	}
 	return mgrs
@@ -149,12 +159,12 @@ func (d *Dispatcher) Run(ctx context.Context) error {
 	d.mu.Lock()
 	if d.isRunning() {
 		d.mu.Unlock()
-		return fmt.Errorf("dispatcher is stopped")
+		return fmt.Errorf("dispatcher is already running")
 	}
 	logger := log.G(ctx).WithField("module", "dispatcher")
 	ctx = log.WithLogger(ctx, logger)
 	if err := d.markNodesUnknown(ctx); err != nil {
-		logger.Errorf("failed to mark all nodes unknown: %v", err)
+		logger.Errorf(`failed to move all nodes to "unknown" state: %v`, err)
 	}
 	configWatcher, cancel, err := store.ViewAndWatch(
 		d.store,
@@ -177,6 +187,7 @@ func (d *Dispatcher) Run(ctx context.Context) error {
 		state.EventUpdateCluster{},
 	)
 	if err != nil {
+		d.mu.Unlock()
 		return err
 	}
 	defer cancel()
@@ -238,6 +249,7 @@ func (d *Dispatcher) Run(ctx context.Context) error {
 func (d *Dispatcher) Stop() error {
 	d.mu.Lock()
 	if !d.isRunning() {
+		d.mu.Unlock()
 		return fmt.Errorf("dispatcher is already stopped")
 	}
 	d.cancel()
@@ -280,20 +292,20 @@ func (d *Dispatcher) markNodesUnknown(ctx context.Context) error {
 				}
 				node.Status = api.NodeStatus{
 					State:   api.NodeStatus_UNKNOWN,
-					Message: "Node marked as unknown due to leadership change in cluster",
+					Message: `Node moved to "unknown" state due to leadership change in cluster`,
 				}
 				nodeID := node.ID
 
 				expireFunc := func() {
 					log := log.WithField("node", nodeID)
-					nodeStatus := api.NodeStatus{State: api.NodeStatus_DOWN, Message: "heartbeat failure for unknown node"}
+					nodeStatus := api.NodeStatus{State: api.NodeStatus_DOWN, Message: `heartbeat failure for node in "unknown" state`}
 					log.Debugf("heartbeat expiration for unknown node")
 					if err := d.nodeRemove(nodeID, nodeStatus); err != nil {
-						log.WithError(err).Errorf("failed deregistering node after heartbeat expiration for unknown node")
+						log.WithError(err).Errorf(`failed deregistering node after heartbeat expiration for node in "unknown" state`)
 					}
 				}
 				if err := d.nodes.AddUnknown(node, expireFunc); err != nil {
-					return fmt.Errorf("add unknown node failed: %v", err)
+					return fmt.Errorf(`adding node in "unknown" state to node store failed: %v`, err)
 				}
 				if err := store.UpdateNode(tx, node); err != nil {
 					return fmt.Errorf("update failed %v", err)
@@ -301,7 +313,7 @@ func (d *Dispatcher) markNodesUnknown(ctx context.Context) error {
 				return nil
 			})
 			if err != nil {
-				log.WithField("node", n.ID).WithError(err).Errorf("failed to mark node as unknown")
+				log.WithField("node", n.ID).WithError(err).Errorf(`failed to move node to "unknown" state`)
 			}
 		}
 		return nil
@@ -322,10 +334,14 @@ func (d *Dispatcher) isRunning() bool {
 }
 
 // register is used for registration of node with particular dispatcher.
-func (d *Dispatcher) register(ctx context.Context, nodeID string, description *api.NodeDescription) (string, string, error) {
+func (d *Dispatcher) register(ctx context.Context, nodeID string, description *api.NodeDescription) (string, error) {
 	// prevent register until we're ready to accept it
 	if err := d.isRunningLocked(); err != nil {
-		return "", "", err
+		return "", err
+	}
+
+	if err := d.nodes.CheckRateLimit(nodeID); err != nil {
+		return "", err
 	}
 
 	// create or update node in store
@@ -345,7 +361,7 @@ func (d *Dispatcher) register(ctx context.Context, nodeID string, description *a
 
 	})
 	if err != nil {
-		return "", "", err
+		return "", err
 	}
 
 	expireFunc := func() {
@@ -367,7 +383,7 @@ func (d *Dispatcher) register(ctx context.Context, nodeID string, description *a
 	// time a node registers, we invalidate the session and issue a new
 	// session, once identity is proven. This will cause misbehaved agents to
 	// be kicked when multiple connections are made.
-	return rn.Node.ID, rn.SessionID, nil
+	return rn.SessionID, nil
 }
 
 // UpdateTaskStatus updates status of task. Node should send such updates
@@ -562,20 +578,47 @@ func (d *Dispatcher) Tasks(r *api.TasksRequest, stream api.Dispatcher_TasksServe
 			return err
 		}
 
-		select {
-		case event := <-nodeTasks:
-			switch v := event.(type) {
-			case state.EventCreateTask:
-				tasksMap[v.Task.ID] = v.Task
-			case state.EventUpdateTask:
-				tasksMap[v.Task.ID] = v.Task
-			case state.EventDeleteTask:
-				delete(tasksMap, v.Task.ID)
+		// bursty events should be processed in batches and sent out snapshot
+		const modificationBatchLimit = 200
+		const eventPausedGap = 50 * time.Millisecond
+		var modificationCnt int
+		// eventPaused is true when there have been modifications
+		// but next event has not arrived within eventPausedGap
+		eventPaused := false
+
+		for modificationCnt < modificationBatchLimit && !eventPaused {
+			select {
+			case event := <-nodeTasks:
+				switch v := event.(type) {
+				case state.EventCreateTask:
+					tasksMap[v.Task.ID] = v.Task
+					modificationCnt++
+				case state.EventUpdateTask:
+					if oldTask, exists := tasksMap[v.Task.ID]; exists {
+						// States ASSIGNED and below are set by the orchestrator/scheduler,
+						// not the agent, so tasks in these states need to be sent to the
+						// agent even if nothing else has changed.
+						if equality.TasksEqualStable(oldTask, v.Task) && v.Task.Status.State > api.TaskStateAssigned {
+							// this update should not trigger action at agent
+							tasksMap[v.Task.ID] = v.Task
+							continue
+						}
+					}
+					tasksMap[v.Task.ID] = v.Task
+					modificationCnt++
+				case state.EventDeleteTask:
+					delete(tasksMap, v.Task.ID)
+					modificationCnt++
+				}
+			case <-time.After(eventPausedGap):
+				if modificationCnt > 0 {
+					eventPaused = true
+				}
+			case <-stream.Context().Done():
+				return stream.Context().Err()
+			case <-d.ctx.Done():
+				return d.ctx.Err()
 			}
-		case <-stream.Context().Done():
-			return stream.Context().Err()
-		case <-d.ctx.Done():
-			return d.ctx.Err()
 		}
 	}
 }
@@ -640,7 +683,7 @@ func (d *Dispatcher) Session(r *api.SessionRequest, stream api.Dispatcher_Sessio
 	}
 
 	// register the node.
-	nodeID, sessionID, err := d.register(stream.Context(), nodeID, r.Description)
+	sessionID, err := d.register(stream.Context(), nodeID, r.Description)
 	if err != nil {
 		return err
 	}

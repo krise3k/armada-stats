@@ -262,10 +262,6 @@ func (cli *DaemonCli) start() (err error) {
 		<-stopc // wait for daemonCli.start() to return
 	})
 
-	if err := pluginInit(cli.Config, containerdRemote, registryService); err != nil {
-		return err
-	}
-
 	d, err := daemon.NewDaemon(cli.Config, registryService, containerdRemote)
 	if err != nil {
 		return fmt.Errorf("Error starting daemon: %v", err)
@@ -274,9 +270,11 @@ func (cli *DaemonCli) start() (err error) {
 	name, _ := os.Hostname()
 
 	c, err := cluster.New(cluster.Config{
-		Root:    cli.Config.Root,
-		Name:    name,
-		Backend: d,
+		Root:                   cli.Config.Root,
+		Name:                   name,
+		Backend:                d,
+		NetworkSubnetsProvider: d,
+		DefaultAdvertiseAddr:   cli.Config.SwarmDefaultAdvertiseAddr,
 	})
 	if err != nil {
 		logrus.Fatalf("Error creating cluster component: %v", err)

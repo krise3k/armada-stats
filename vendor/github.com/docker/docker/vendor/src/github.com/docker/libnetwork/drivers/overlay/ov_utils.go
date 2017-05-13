@@ -13,6 +13,8 @@ import (
 	"github.com/vishvananda/netns"
 )
 
+var soTimeout = ns.NetlinkSocketsTimeout
+
 func validateID(nid, eid string) error {
 	if nid == "" {
 		return fmt.Errorf("invalid network id")
@@ -52,11 +54,11 @@ func createVethPair() (string, string, error) {
 	return name1, name2, nil
 }
 
-func createVxlan(name string, vni uint32) error {
+func createVxlan(name string, vni uint32, mtu int) error {
 	defer osl.InitOSContext()()
 
 	vxlan := &netlink.Vxlan{
-		LinkAttrs: netlink.LinkAttrs{Name: name},
+		LinkAttrs: netlink.LinkAttrs{Name: name, MTU: mtu},
 		VxlanId:   int(vni),
 		Learning:  true,
 		Port:      vxlanPort,
@@ -134,6 +136,10 @@ func deleteVxlanByVNI(path string, vni uint32) error {
 			return fmt.Errorf("failed to get netlink handle for ns %s: %v", path, err)
 		}
 		defer nlh.Delete()
+		err = nlh.SetSocketTimeout(soTimeout)
+		if err != nil {
+			logrus.Warnf("Failed to set the timeout on the netlink handle sockets for vxlan deletion: %v", err)
+		}
 	}
 
 	links, err := nlh.LinkList()

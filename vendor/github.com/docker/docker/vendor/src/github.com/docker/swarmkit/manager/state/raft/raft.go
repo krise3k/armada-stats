@@ -2,8 +2,10 @@ package raft
 
 import (
 	"errors"
+	"fmt"
 	"math"
 	"math/rand"
+	"net"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -31,6 +33,11 @@ import (
 )
 
 var (
+	// ErrHealthCheckFailure is returned when there is an issue with the initial handshake which means
+	// that the address provided must be invalid or there is ongoing connectivity issues at join time.
+	ErrHealthCheckFailure = errors.New("raft: could not connect to prospective new cluster member using its advertised address")
+	// ErrNoRaftMember is thrown when the node is not yet part of a raft cluster
+	ErrNoRaftMember = errors.New("raft: node is not yet part of a raft cluster")
 	// ErrConfChangeRefused is returned when there is an issue with the configuration change
 	ErrConfChangeRefused = errors.New("raft: propose configuration change refused")
 	// ErrApplyNotSpecified is returned during the creation of a raft node when no apply method was provided
@@ -80,36 +87,35 @@ type Node struct {
 	StateDir string
 	Error    error
 
-	raftStore   *raft.MemoryStorage
-	memoryStore *store.MemoryStore
-	Config      *raft.Config
-	reqIDGen    *idutil.Generator
-	wait        *wait
-	wal         *wal.WAL
-	snapshotter *snap.Snapshotter
-	wasLeader   bool
-	removed     uint32
-	joinAddr    string
+	raftStore           *raft.MemoryStorage
+	memoryStore         *store.MemoryStore
+	Config              *raft.Config
+	opts                NewNodeOptions
+	reqIDGen            *idutil.Generator
+	wait                *wait
+	wal                 *wal.WAL
+	snapshotter         *snap.Snapshotter
+	campaignWhenAble    bool
+	signalledLeadership uint32
+	isMember            uint32
+	joinAddr            string
 
 	// waitProp waits for all the proposals to be terminated before
 	// shutting down the node.
 	waitProp sync.WaitGroup
 
-	// forceNewCluster is a special flag used to recover from disaster
-	// scenario by pointing to an existing or backed up data directory.
-	forceNewCluster bool
-
 	confState     raftpb.ConfState
 	appliedIndex  uint64
 	snapshotIndex uint64
 
-	ticker              clock.Ticker
-	sendTimeout         time.Duration
-	stopCh              chan struct{}
-	doneCh              chan struct{}
+	ticker      clock.Ticker
+	sendTimeout time.Duration
+	stopCh      chan struct{}
+	doneCh      chan struct{}
+	// removeRaftCh notifies about node deletion from raft cluster
+	removeRaftCh        chan struct{}
+	removeRaftOnce      sync.Once
 	leadershipBroadcast *events.Broadcaster
-
-	startNodePeers []raft.Peer
 
 	// used to coordinate shutdown
 	stopMu sync.RWMutex
@@ -153,7 +159,7 @@ func init() {
 }
 
 // NewNode generates a new Raft node
-func NewNode(ctx context.Context, opts NewNodeOptions) (*Node, error) {
+func NewNode(ctx context.Context, opts NewNodeOptions) *Node {
 	cfg := opts.Config
 	if cfg == nil {
 		cfg = DefaultNodeConfig()
@@ -173,6 +179,7 @@ func NewNode(ctx context.Context, opts NewNodeOptions) (*Node, error) {
 		tlsCredentials: opts.TLSCredentials,
 		raftStore:      raftStore,
 		Address:        opts.Addr,
+		opts:           opts,
 		Config: &raft.Config{
 			ElectionTick:    cfg.ElectionTick,
 			HeartbeatTick:   cfg.HeartbeatTick,
@@ -181,9 +188,9 @@ func NewNode(ctx context.Context, opts NewNodeOptions) (*Node, error) {
 			MaxInflightMsgs: cfg.MaxInflightMsgs,
 			Logger:          cfg.Logger,
 		},
-		forceNewCluster:     opts.ForceNewCluster,
 		stopCh:              make(chan struct{}),
 		doneCh:              make(chan struct{}),
+		removeRaftCh:        make(chan struct{}),
 		StateDir:            opts.StateDir,
 		joinAddr:            opts.JoinAddr,
 		sendTimeout:         2 * time.Second,
@@ -200,13 +207,21 @@ func NewNode(ctx context.Context, opts NewNodeOptions) (*Node, error) {
 		n.sendTimeout = opts.SendTimeout
 	}
 
-	loadAndStartErr := n.loadAndStart(ctx, opts.ForceNewCluster)
+	n.reqIDGen = idutil.NewGenerator(uint16(n.Config.ID), time.Now())
+	n.wait = newWait()
+
+	return n
+}
+
+// JoinAndStart joins and starts the raft server
+func (n *Node) JoinAndStart() error {
+	loadAndStartErr := n.loadAndStart(n.Ctx, n.opts.ForceNewCluster)
 	if loadAndStartErr != nil && loadAndStartErr != errNoWAL {
 		n.ticker.Stop()
-		return nil, loadAndStartErr
+		return loadAndStartErr
 	}
 
-	snapshot, err := raftStore.Snapshot()
+	snapshot, err := n.raftStore.Snapshot()
 	// Snapshot never returns an error
 	if err != nil {
 		panic("could not get snapshot of raft store")
@@ -215,14 +230,12 @@ func NewNode(ctx context.Context, opts NewNodeOptions) (*Node, error) {
 	n.confState = snapshot.Metadata.ConfState
 	n.appliedIndex = snapshot.Metadata.Index
 	n.snapshotIndex = snapshot.Metadata.Index
-	n.reqIDGen = idutil.NewGenerator(uint16(n.Config.ID), time.Now())
-	n.wait = newWait()
 
 	if loadAndStartErr == errNoWAL {
 		if n.joinAddr != "" {
 			c, err := n.ConnectToMember(n.joinAddr, 10*time.Second)
 			if err != nil {
-				return nil, err
+				return err
 			}
 			client := api.NewRaftMembershipClient(c.Conn)
 			defer func() {
@@ -235,40 +248,43 @@ func NewNode(ctx context.Context, opts NewNodeOptions) (*Node, error) {
 				Addr: n.Address,
 			})
 			if err != nil {
-				return nil, err
+				return err
 			}
 
 			n.Config.ID = resp.RaftID
 
-			if _, err := n.createWAL(opts.ID); err != nil {
-				return nil, err
+			if _, err := n.createWAL(n.opts.ID); err != nil {
+				return err
 			}
 
 			n.Node = raft.StartNode(n.Config, []raft.Peer{})
 
 			if err := n.registerNodes(resp.Members); err != nil {
-				return nil, err
+				return err
 			}
 		} else {
 			// First member in the cluster, self-assign ID
 			n.Config.ID = uint64(rand.Int63()) + 1
-			peer, err := n.createWAL(opts.ID)
+			peer, err := n.createWAL(n.opts.ID)
 			if err != nil {
-				return nil, err
+				return err
 			}
 			n.Node = raft.StartNode(n.Config, []raft.Peer{peer})
 			if err := n.Campaign(n.Ctx); err != nil {
-				return nil, err
+				return err
 			}
 		}
-		return n, nil
+		atomic.StoreUint32(&n.isMember, 1)
+		return nil
 	}
 
 	if n.joinAddr != "" {
 		n.Config.Logger.Warning("ignoring request to join cluster, because raft state already exists")
 	}
+	n.campaignWhenAble = true
 	n.Node = raft.RestartNode(n.Config)
-	return n, nil
+	atomic.StoreUint32(&n.isMember, 1)
+	return nil
 }
 
 // DefaultNodeConfig returns the default config for a
@@ -309,6 +325,8 @@ func (n *Node) Run(ctx context.Context) error {
 		close(n.doneCh)
 	}()
 
+	wasLeader := false
+
 	for {
 		select {
 		case <-n.ticker.C():
@@ -338,12 +356,47 @@ func (n *Node) Run(ctx context.Context) error {
 			// saveToStorage.
 			if !raft.IsEmptySnap(rd.Snapshot) {
 				// Load the snapshot data into the store
-				if err := n.restoreFromSnapshot(rd.Snapshot.Data, n.forceNewCluster); err != nil {
+				if err := n.restoreFromSnapshot(rd.Snapshot.Data, false); err != nil {
 					n.Config.Logger.Error(err)
 				}
 				n.appliedIndex = rd.Snapshot.Metadata.Index
 				n.snapshotIndex = rd.Snapshot.Metadata.Index
 				n.confState = rd.Snapshot.Metadata.ConfState
+			}
+
+			// If we cease to be the leader, we must cancel any
+			// proposals that are currently waiting for a quorum to
+			// acknowledge them. It is still possible for these to
+			// become committed, but if that happens we will apply
+			// them as any follower would.
+
+			// It is important that we cancel these proposals before
+			// calling processCommitted, so processCommitted does
+			// not deadlock.
+
+			if rd.SoftState != nil {
+				if wasLeader && rd.SoftState.RaftState != raft.StateLeader {
+					wasLeader = false
+					if atomic.LoadUint32(&n.signalledLeadership) == 1 {
+						atomic.StoreUint32(&n.signalledLeadership, 0)
+						n.leadershipBroadcast.Write(IsFollower)
+					}
+
+					// It is important that we set n.signalledLeadership to 0
+					// before calling n.wait.cancelAll. When a new raft
+					// request is registered, it checks n.signalledLeadership
+					// afterwards, and cancels the registration if it is 0.
+					// If cancelAll was called first, this call might run
+					// before the new request registers, but
+					// signalledLeadership would be set after the check.
+					// Setting signalledLeadership before calling cancelAll
+					// ensures that if a new request is registered during
+					// this transition, it will either be cancelled by
+					// cancelAll, or by its own check of signalledLeadership.
+					n.wait.cancelAll()
+				} else if !wasLeader && rd.SoftState.RaftState == raft.StateLeader {
+					wasLeader = true
+				}
 			}
 
 			// Process committed entries
@@ -360,36 +413,28 @@ func (n *Node) Run(ctx context.Context) error {
 				n.doSnapshot(&raftConfig)
 			}
 
-			// If we cease to be the leader, we must cancel
-			// any proposals that are currently waiting for
-			// a quorum to acknowledge them. It is still
-			// possible for these to become committed, but
-			// if that happens we will apply them as any
-			// follower would.
-			if rd.SoftState != nil {
-				if n.wasLeader && rd.SoftState.RaftState != raft.StateLeader {
-					n.wasLeader = false
-					n.wait.cancelAll()
-					n.leadershipBroadcast.Write(IsFollower)
-				} else if !n.wasLeader && rd.SoftState.RaftState == raft.StateLeader {
-					n.wasLeader = true
+			if wasLeader && atomic.LoadUint32(&n.signalledLeadership) != 1 {
+				// If all the entries in the log have become
+				// committed, broadcast our leadership status.
+				if n.caughtUp() {
+					atomic.StoreUint32(&n.signalledLeadership, 1)
 					n.leadershipBroadcast.Write(IsLeader)
 				}
 			}
 
-			// If the node was removed from other members,
-			// send back an error to the caller to start
-			// the shutdown process.
-			if n.mustStop() {
-				n.stop()
-
-				// Move WAL and snapshot out of the way, since
-				// they are no longer usable.
-				if err := n.moveWALAndSnap(); err != nil {
-					n.Config.Logger.Error(err)
+			// If we are the only registered member after
+			// restoring from the state, campaign to be the
+			// leader.
+			if n.campaignWhenAble {
+				members := n.cluster.Members()
+				if len(members) >= 1 {
+					n.campaignWhenAble = false
 				}
-
-				return ErrMemberRemoved
+				if len(members) == 1 && members[n.Config.ID] != nil {
+					if err := n.Campaign(n.Ctx); err != nil {
+						panic("raft: cannot campaign to be the leader on node restore")
+					}
+				}
 			}
 
 			// Advance the state machine
@@ -400,6 +445,19 @@ func (n *Node) Run(ctx context.Context) error {
 				n.snapshotIndex = snapshotIndex
 			}
 			n.snapshotInProgress = nil
+		case <-n.removeRaftCh:
+			// If the node was removed from other members,
+			// send back an error to the caller to start
+			// the shutdown process.
+			n.stop()
+
+			// Move WAL and snapshot out of the way, since
+			// they are no longer usable.
+			if err := n.moveWALAndSnap(); err != nil {
+				n.Config.Logger.Error(err)
+			}
+
+			return ErrMemberRemoved
 		case <-n.stopCh:
 			n.stop()
 			return nil
@@ -419,6 +477,17 @@ func (n *Node) Shutdown() {
 	}
 }
 
+// isShutdown indicates if node was shut down.
+// This method should be called under n.stopMu to avoid races with n.stop().
+func (n *Node) isShutdown() bool {
+	select {
+	case <-n.Ctx.Done():
+		return true
+	default:
+		return false
+	}
+}
+
 func (n *Node) stop() {
 	n.stopMu.Lock()
 	defer n.stopMu.Unlock()
@@ -434,6 +503,7 @@ func (n *Node) stop() {
 		}
 	}
 	n.Stop()
+	n.ticker.Stop()
 	if err := n.wal.Close(); err != nil {
 		n.Config.Logger.Errorf("raft: error closing WAL: %v", err)
 	}
@@ -442,6 +512,10 @@ func (n *Node) stop() {
 
 // IsLeader checks if we are the leader or not
 func (n *Node) IsLeader() bool {
+	if !n.IsMember() {
+		return false
+	}
+
 	if n.Node.Status().Lead == n.Config.ID {
 		return true
 	}
@@ -450,7 +524,23 @@ func (n *Node) IsLeader() bool {
 
 // Leader returns the id of the leader
 func (n *Node) Leader() uint64 {
+	if !n.IsMember() {
+		return 0
+	}
 	return n.Node.Status().Lead
+}
+
+// ReadyForProposals returns true if the node has broadcasted a message
+// saying that it has become the leader. This means it is ready to accept
+// proposals.
+func (n *Node) ReadyForProposals() bool {
+	return atomic.LoadUint32(&n.signalledLeadership) == 1
+}
+
+func (n *Node) caughtUp() bool {
+	// obnoxious function that always returns a nil error
+	lastIndex, _ := n.raftStore.LastIndex()
+	return n.appliedIndex >= lastIndex
 }
 
 // Join asks to a member of the raft to propose
@@ -479,7 +569,11 @@ func (n *Node) Join(ctx context.Context, req *api.JoinRequest) (*api.JoinRespons
 	n.membershipLock.Lock()
 	defer n.membershipLock.Unlock()
 
-	if n.Node == nil {
+	if !n.IsMember() {
+		return nil, ErrNoRaftMember
+	}
+
+	if n.IsStopped() {
 		log.WithError(ErrStopped).Errorf(ErrStopped.Error())
 		return nil, ErrStopped
 	}
@@ -497,7 +591,33 @@ func (n *Node) Join(ctx context.Context, req *api.JoinRequest) (*api.JoinRespons
 		}
 	}
 
-	err = n.addMember(ctx, req.Addr, raftID, nodeInfo.NodeID)
+	remoteAddr := req.Addr
+
+	// If the joining node sent an address like 0.0.0.0:4242, automatically
+	// determine its actual address based on the GRPC connection. This
+	// avoids the need for a prospective member to know its own address.
+
+	requestHost, requestPort, err := net.SplitHostPort(remoteAddr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid address %s in raft join request", remoteAddr)
+	}
+
+	requestIP := net.ParseIP(requestHost)
+	if requestIP != nil && requestIP.IsUnspecified() {
+		remoteHost, _, err := net.SplitHostPort(nodeInfo.RemoteAddr)
+		if err != nil {
+			return nil, err
+		}
+		remoteAddr = net.JoinHostPort(remoteHost, requestPort)
+	}
+
+	// We do not bother submitting a configuration change for the
+	// new member if we can't contact it back using its address
+	if err := n.checkHealth(ctx, remoteAddr, 5*time.Second); err != nil {
+		return nil, err
+	}
+
+	err = n.addMember(ctx, remoteAddr, raftID, nodeInfo.NodeID)
 	if err != nil {
 		log.WithError(err).Errorf("failed to add member")
 		return nil, err
@@ -514,6 +634,28 @@ func (n *Node) Join(ctx context.Context, req *api.JoinRequest) (*api.JoinRespons
 	log.Debugf("node joined")
 
 	return &api.JoinResponse{Members: nodes, RaftID: raftID}, nil
+}
+
+// checkHealth tries to contact an aspiring member through its advertised address
+// and checks if its raft server is running.
+func (n *Node) checkHealth(ctx context.Context, addr string, timeout time.Duration) error {
+	conn, err := dial(addr, "tcp", n.tlsCredentials, timeout)
+	if err != nil {
+		return err
+	}
+
+	client := api.NewHealthClient(conn)
+	defer conn.Close()
+
+	resp, err := client.Check(ctx, &api.HealthCheckRequest{Service: "Raft"})
+	if err != nil {
+		return ErrHealthCheckFailure
+	}
+	if resp != nil && resp.Status != api.HealthCheckResponse_SERVING {
+		return ErrHealthCheckFailure
+	}
+
+	return nil
 }
 
 // addMember submits a configuration change to add a new member on the raft cluster.
@@ -563,7 +705,11 @@ func (n *Node) Leave(ctx context.Context, req *api.LeaveRequest) (*api.LeaveResp
 	n.stopMu.RLock()
 	defer n.stopMu.RUnlock()
 
-	if n.Node == nil {
+	if !n.IsMember() {
+		return nil, ErrNoRaftMember
+	}
+
+	if n.IsStopped() {
 		return nil, ErrStopped
 	}
 
@@ -579,7 +725,14 @@ func (n *Node) Leave(ctx context.Context, req *api.LeaveRequest) (*api.LeaveResp
 	return &api.LeaveResponse{}, nil
 }
 
-// RemoveMember submits a configuration change to remove a member from the raft cluster.
+// CanRemoveMember checks if a member can be removed from
+// the context of the current node.
+func (n *Node) CanRemoveMember(id uint64) bool {
+	return n.cluster.CanRemoveMember(n.Config.ID, id)
+}
+
+// RemoveMember submits a configuration change to remove a member from the raft cluster
+// after checking if the operation would not result in a loss of quorum.
 func (n *Node) RemoveMember(ctx context.Context, id uint64) error {
 	n.membershipLock.Lock()
 	defer n.membershipLock.Unlock()
@@ -603,16 +756,33 @@ func (n *Node) RemoveMember(ctx context.Context, id uint64) error {
 // raft state machine with the provided message on the
 // receiving node
 func (n *Node) ProcessRaftMessage(ctx context.Context, msg *api.ProcessRaftMessageRequest) (*api.ProcessRaftMessageResponse, error) {
+	if msg == nil || msg.Message == nil {
+		return nil, grpc.Errorf(codes.InvalidArgument, "no message provided")
+	}
+
 	// Don't process the message if this comes from
 	// a node in the remove set
 	if n.cluster.IsIDRemoved(msg.Message.From) {
 		return nil, ErrMemberRemoved
 	}
 
+	if msg.Message.Type == raftpb.MsgProp {
+		// We don't accepted forwarded proposals. Our
+		// current architecture depends on only the leader
+		// making proposals, so in-flight proposals can be
+		// guaranteed not to conflict.
+		return nil, grpc.Errorf(codes.InvalidArgument, "proposals not accepted")
+	}
+
 	// can't stop the raft node while an async RPC is in progress
 	n.stopMu.RLock()
 	defer n.stopMu.RUnlock()
-	if n.Node == nil {
+
+	if !n.IsMember() {
+		return nil, ErrNoRaftMember
+	}
+
+	if n.IsStopped() {
 		return nil, ErrStopped
 	}
 
@@ -625,6 +795,10 @@ func (n *Node) ProcessRaftMessage(ctx context.Context, msg *api.ProcessRaftMessa
 
 // ResolveAddress returns the address reaching for a given node ID.
 func (n *Node) ResolveAddress(ctx context.Context, msg *api.ResolveAddressRequest) (*api.ResolveAddressResponse, error) {
+	if !n.IsMember() {
+		return nil, ErrNoRaftMember
+	}
+
 	nodeInfo, err := ca.RemoteNode(ctx)
 	if err != nil {
 		return nil, err
@@ -651,12 +825,15 @@ func (n *Node) ResolveAddress(ctx context.Context, msg *api.ResolveAddressReques
 func (n *Node) LeaderAddr() (string, error) {
 	n.stopMu.RLock()
 	defer n.stopMu.RUnlock()
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	if n.isShutdown() {
+		return "", fmt.Errorf("raft node is shut down")
+	}
+	ctx, cancel := context.WithTimeout(n.Ctx, 10*time.Second)
 	defer cancel()
 	if err := WaitForLeader(ctx, n); err != nil {
 		return "", ErrNoClusterLeader
 	}
-	if n.Node == nil {
+	if n.IsStopped() {
 		return "", ErrStopped
 	}
 	ms := n.cluster.Members()
@@ -669,10 +846,27 @@ func (n *Node) LeaderAddr() (string, error) {
 
 // registerNode registers a new node on the cluster memberlist
 func (n *Node) registerNode(node *api.RaftMember) error {
+	if n.cluster.IsIDRemoved(node.RaftID) {
+		return nil
+	}
+
 	member := &membership.Member{}
 
-	if n.cluster.GetMember(node.RaftID) != nil {
-		// member already exists
+	existingMember := n.cluster.GetMember(node.RaftID)
+	if existingMember != nil {
+		// Member already exists
+
+		// If the address is different from what we thought it was,
+		// update it. This can happen if we just joined a cluster
+		// and are adding ourself now with the remotely-reachable
+		// address.
+		if existingMember.Addr != node.Addr {
+			member.RaftMember = node
+			member.RaftClient = existingMember.RaftClient
+			member.Conn = existingMember.Conn
+			n.cluster.AddMember(member)
+		}
+
 		return nil
 	}
 
@@ -695,6 +889,7 @@ func (n *Node) registerNode(node *api.RaftMember) error {
 		}
 		return err
 	}
+
 	return nil
 }
 
@@ -760,11 +955,30 @@ func (n *Node) GetMemberlist() map[uint64]*api.RaftMember {
 	return memberlist
 }
 
-// mustStop checks if the raft node must be stopped
-// because it was removed from the cluster from
-// other members
-func (n *Node) mustStop() bool {
-	return atomic.LoadUint32(&n.removed) == 1
+// GetMemberByNodeID returns member information based
+// on its generic Node ID.
+func (n *Node) GetMemberByNodeID(nodeID string) *membership.Member {
+	members := n.cluster.Members()
+	for _, member := range members {
+		if member.NodeID == nodeID {
+			return member
+		}
+	}
+	return nil
+}
+
+// IsMember checks if the raft node has effectively joined
+// a cluster of existing members.
+func (n *Node) IsMember() bool {
+	return atomic.LoadUint32(&n.isMember) == 1
+}
+
+// IsStopped checks if the raft node is stopped or not
+func (n *Node) IsStopped() bool {
+	if n.Node == nil {
+		return true
+	}
+	return false
 }
 
 // canSubmitProposal defines if any more proposals
@@ -815,6 +1029,14 @@ func (n *Node) send(messages []raftpb.Message) error {
 			if err := n.Step(n.Ctx, m); err != nil {
 				return err
 			}
+			continue
+		}
+
+		if m.Type == raftpb.MsgProp {
+			// We don't forward proposals to the leader. Our
+			// current architecture depends on only the leader
+			// making proposals, so in-flight proposals can be
+			// guaranteed not to conflict.
 			continue
 		}
 
@@ -882,15 +1104,25 @@ func (n *Node) sendToMember(members map[uint64]*membership.Member, m raftpb.Mess
 	_, err := conn.ProcessRaftMessage(ctx, &api.ProcessRaftMessageRequest{Message: &m})
 	if err != nil {
 		if grpc.ErrorDesc(err) == ErrMemberRemoved.Error() {
-			atomic.StoreUint32(&n.removed, 1)
+			n.removeRaftOnce.Do(func() {
+				close(n.removeRaftCh)
+			})
 		}
 		if m.Type == raftpb.MsgSnap {
 			n.ReportSnapshot(m.To, raft.SnapshotFailure)
 		}
-		if n.Node == nil {
+		if n.IsStopped() {
 			panic("node is nil")
 		}
 		n.ReportUnreachable(m.To)
+
+		// Bounce the connection
+		newConn, err := n.ConnectToMember(conn.Addr, 0)
+		if err != nil {
+			n.Config.Logger.Errorf("could connect to member ID %x at %s: %v", m.To, conn.Addr, err)
+		} else {
+			n.cluster.ReplaceMemberConnection(m.To, conn, newConn)
+		}
 	} else if m.Type == raftpb.MsgSnap {
 		n.ReportSnapshot(m.To, raft.SnapshotFinish)
 	}
@@ -916,10 +1148,14 @@ func (n *Node) processInternalRaftRequest(ctx context.Context, r *api.InternalRa
 
 	r.ID = n.reqIDGen.Next()
 
-	ch := n.wait.register(r.ID, cb)
+	// This must be derived from the context which is cancelled by stop()
+	// to avoid a deadlock on shutdown.
+	waitCtx, cancel := context.WithCancel(n.Ctx)
+
+	ch := n.wait.register(r.ID, cb, cancel)
 
 	// Do this check after calling register to avoid a race.
-	if !n.IsLeader() {
+	if atomic.LoadUint32(&n.signalledLeadership) != 1 {
 		n.wait.cancel(r.ID)
 		return nil, ErrLostLeadership
 	}
@@ -935,24 +1171,19 @@ func (n *Node) processInternalRaftRequest(ctx context.Context, r *api.InternalRa
 		return nil, ErrRequestTooLarge
 	}
 
-	// This must use the context which is cancelled by stop() to avoid a
-	// deadlock on shutdown.
-	err = n.Propose(n.Ctx, data)
+	err = n.Propose(waitCtx, data)
 	if err != nil {
 		n.wait.cancel(r.ID)
 		return nil, err
 	}
 
 	select {
-	case x, ok := <-ch:
-		if ok {
-			res := x.(*applyResult)
-			return res.resp, res.err
-		}
-		return nil, ErrLostLeadership
-	case <-n.Ctx.Done():
+	case x := <-ch:
+		res := x.(*applyResult)
+		return res.resp, res.err
+	case <-waitCtx.Done():
 		n.wait.cancel(r.ID)
-		return nil, ErrStopped
+		return nil, ErrLostLeadership
 	case <-ctx.Done():
 		n.wait.cancel(r.ID)
 		return nil, ctx.Err()
@@ -964,10 +1195,12 @@ func (n *Node) processInternalRaftRequest(ctx context.Context, r *api.InternalRa
 // until the change is performed or there is an error.
 func (n *Node) configure(ctx context.Context, cc raftpb.ConfChange) error {
 	cc.ID = n.reqIDGen.Next()
-	ch := n.wait.register(cc.ID, nil)
+
+	ctx, cancel := context.WithCancel(ctx)
+	ch := n.wait.register(cc.ID, nil, cancel)
 
 	if err := n.ProposeConfChange(ctx, cc); err != nil {
-		n.wait.trigger(cc.ID, nil)
+		n.wait.cancel(cc.ID)
 		return err
 	}
 
@@ -981,7 +1214,7 @@ func (n *Node) configure(ctx context.Context, cc raftpb.ConfChange) error {
 		}
 		return nil
 	case <-ctx.Done():
-		n.wait.trigger(cc.ID, nil)
+		n.wait.cancel(cc.ID)
 		return ctx.Err()
 	case <-n.Ctx.Done():
 		return ErrStopped
@@ -1023,6 +1256,11 @@ func (n *Node) processEntry(entry raftpb.Entry) error {
 		// wrote this to raft, or we wrote it before losing the leader
 		// position and cancelling the transaction. Create a new
 		// transaction to commit the data.
+
+		// It should not be possible for processInternalRaftRequest
+		// to be running in this situation, but out of caution we
+		// cancel any current invocations to avoid a deadlock.
+		n.wait.cancelAll()
 
 		err := n.memoryStore.ApplyStoreActions(r.Action)
 		if err != nil {
@@ -1089,15 +1327,26 @@ func (n *Node) applyRemoveNode(cc raftpb.ConfChange) (err error) {
 	// If the node from where the remove is issued is
 	// a follower and the leader steps down, Campaign
 	// to be the leader.
-	if cc.NodeID == n.Leader() {
+
+	if cc.NodeID == n.Leader() && !n.IsLeader() {
 		if err = n.Campaign(n.Ctx); err != nil {
 			return err
 		}
 	}
 
-	// Do not unregister yourself
-	if n.Config.ID == cc.NodeID {
-		return nil
+	if cc.NodeID == n.Config.ID {
+		// wait the commit ack to be sent before closing connection
+		n.asyncTasks.Wait()
+
+		// if there are only 2 nodes in the cluster, and leader is leaving
+		// before closing the connection, leader has to ensure that follower gets
+		// noticed about this raft conf change commit. Otherwise, follower would
+		// assume there are still 2 nodes in the cluster and won't get elected
+		// into the leader by acquiring the majority (2 nodes)
+
+		// while n.asyncTasks.Wait() could be helpful in this case
+		// it's the best-effort strategy, because this send could be fail due to some errors (such as time limit exceeds)
+		// TODO(Runshen Zhu): use leadership transfer to solve this case, after vendoring raft 3.0+
 	}
 
 	return n.cluster.RemoveMember(cc.NodeID)
