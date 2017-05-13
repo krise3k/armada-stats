@@ -1,0 +1,65 @@
+hash: d6a5dcce9a4290c480543cbf7d9b909617c08acf80ff1551310804efe1e5757f
+updated: 2017-05-13T20:19:00.195969258+02:00
+imports:
+- name: github.com/certifi/gocertifi
+  version: a61bf5eafa3aee233ec8043e9da052447e5463dd
+- name: github.com/docker/docker
+  version: 91fa49071d7373ccdee4585b403b488e1fce2efa
+  subpackages:
+  - opts
+  - pkg/archive
+  - pkg/fileutils
+  - pkg/homedir
+  - pkg/idtools
+  - pkg/ioutils
+  - pkg/longpath
+  - pkg/pools
+  - pkg/promise
+  - pkg/stdcopy
+  - pkg/system
+- name: github.com/docker/engine-api
+  version: f90ecdb1e989f834dabbd91807e891094aa069fe
+  subpackages:
+  - types/filters
+  - types/versions
+- name: github.com/docker/go-units
+  version: f2d77a61e3c169b43402a0a1e84f06daf29b8190
+- name: github.com/evalphobia/logrus_sentry
+  version: 7c1b7faba7ed5772effc03db8e1faa8c90624660
+- name: github.com/fatih/structs
+  version: a720dfa8df582c51dee1b36feabb906bde1588bd
+- name: github.com/fsouza/go-dockerclient
+  version: 1a3d0cfd7814bbfe44ada7617654948c99891749
+- name: github.com/getsentry/raven-go
+  version: b8684db99b339af19aa6f067df3be9de6e995f89
+- name: github.com/hashicorp/go-cleanhttp
+  version: ad28ea4487f05916463e2423a55166280e8254b5
+- name: github.com/influxdata/influxdb
+  version: 77909d7c7826afe597b12d957996d6e16cd1afaa
+  subpackages:
+  - client/v2
+  - models
+  - pkg/escape
+- name: github.com/olebedev/config
+  version: dd1049a3738432dfc49417e2ae5bd97e132ecac6
+- name: github.com/opencontainers/runc
+  version: 629e35666d31f743090452416c8df207d9fdbd34
+  subpackages:
+  - libcontainer/user
+- name: github.com/pkg/errors
+  version: c605e284fe17294bda444b34710735b29d1a9d90
+- name: github.com/serenize/snaker
+  version: 8824b61eca66d308fcb2d515287d3d7a28dba8d6
+- name: github.com/Sirupsen/logrus
+  version: ba1b36c82c5e05c4f912a88eab0dcd91a171688f
+- name: golang.org/x/net
+  version: e445b19913b9d40fdbdfe19ac5e3d314aafd6f63
+  subpackages:
+  - context
+- name: golang.org/x/sys
+  version: 62bee037599929a6e9146f29d10dd5208c43507d
+  subpackages:
+  - unix
+- name: gopkg.in/yaml.v2
+  version: a83829b6f1293c91addabc89d0571c246397bbf4
+testImports: []
