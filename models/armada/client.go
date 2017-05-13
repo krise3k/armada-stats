@@ -62,7 +62,7 @@ func getUptime(timestamp string) (int64, error) {
 
 func parseStatus(statusStr string) Status {
 	switch statusStr {
-	case "passing", "recovering":
+	case "passing", "recovering", "standby":
 		return passing
 	case "warning":
 		return warning
