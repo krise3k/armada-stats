@@ -26,8 +26,10 @@ func SendMetrics(containers Containers) {
 		batch.AddPoint(point)
 	}
 
-	point := createSummary(summary_by_status, hostname, cluster_name)
-	batch.AddPoint(point)
+	if len(summary_by_status) > 0 {
+		point := createSummary(summary_by_status, hostname, cluster_name)
+		batch.AddPoint(point)
+	}
 
 	influxClient.Save(batch)
 }
