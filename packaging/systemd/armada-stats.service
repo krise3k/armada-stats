@@ -1,17 +1,18 @@
 [Unit]
 Description=armada-stats
-After=armada.service
-Requires=armada.service
-PartOf=armada.service
+Wants=armada.service
+
 
 [Service]
 User=armada-stats
 Group=armada-stats
 Type=simple
-Restart=on-failure
+
+ExecStartPre=/usr/bin/systemctl --quiet is-active armada.service
 ExecStart=/usr/local/bin/armada-stats --config /etc/armada-stats/armada-stats.yml
 TimeoutStopSec=5
-RestartSec=1
+Restart=on-failure
+RestartSec=10
 
 [Install]
 WantedBy=multi-user.target
