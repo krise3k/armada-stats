@@ -8,7 +8,7 @@ User=armada-stats
 Group=armada-stats
 Type=simple
 
-ExecStartPre=/usr/bin/systemctl --quiet is-active armada.service
+ExecStartPre=/usr/local/bin/armada info
 ExecStart=/usr/local/bin/armada-stats --config /etc/armada-stats/armada-stats.yml
 TimeoutStopSec=5
 Restart=on-failure
