@@ -2,11 +2,14 @@ package models
 
 import (
 	"github.com/fatih/structs"
-	"github.com/influxdata/influxdb/client/v2"
+	"github.com/influxdata/telegraf"
+	"github.com/influxdata/telegraf/metric"
 	"github.com/krise3k/armada-stats/utils"
 	"github.com/krise3k/armada-stats/utils/influx"
 	"github.com/serenize/snaker"
 	"os"
+	"time"
+	"github.com/krise3k/armada-stats/utils/kafka"
 )
 
 type ShipSummaryCounter map[string]int16
@@ -14,23 +17,44 @@ type ShipSummaryCounter map[string]int16
 func SendMetrics(containers Containers) {
 	hostname := getHostname()
 	cluster_name := getClusterName()
-	influxClient := influx.GetInfluxClient()
-	batch := influxClient.CreateBatchPoints()
 	summary_by_status := ShipSummaryCounter{}
+	var metrics []telegraf.Metric
+	timestamp := time.Now().UTC()
 
 	for _, container := range containers.ContainerList {
 		if len(container.StatusName) > 0 {
 			summary_by_status = updateShipSummary(summary_by_status, container)
 		}
-		point := createPoint(container, hostname, cluster_name)
-		batch.AddPoint(point)
+		metrics = append(metrics, createMetric(container, hostname, cluster_name, timestamp))
 	}
 
 	if len(summary_by_status) > 0 {
-		point := createSummary(summary_by_status, hostname, cluster_name)
-		batch.AddPoint(point)
+		metrics = append(metrics, createSummary(summary_by_status, hostname, cluster_name, timestamp))
 	}
 
+	if useKafka, _ := utils.Config.Bool("send_to_kafka"); useKafka == true {
+		sendToKafka(metrics)
+	}
+
+	if useInflux, _ := utils.Config.Bool("send_to_influx"); useInflux == true {
+		sendToInflux(metrics)
+	}
+}
+
+func sendToKafka(metrics []telegraf.Metric) {
+	kafkaClient := kafka.GetKafkaClient()
+	err := kafkaClient.Write(metrics)
+	if err != nil {
+		utils.GetLogger().WithError(err).Error("Error sending to kafka")
+	}
+}
+
+func sendToInflux(metrics []telegraf.Metric) {
+	influxClient := influx.GetInfluxClient()
+	batch := influxClient.CreateBatchPoints()
+	for _, m := range metrics {
+		batch.AddPoint(influxClient.CreatePoint(m.Name(), m.Tags(), m.Fields()))
+	}
 	influxClient.Save(batch)
 }
 func updateShipSummary(summary_by_status ShipSummaryCounter, container *Container) ShipSummaryCounter {
@@ -43,7 +67,7 @@ func updateShipSummary(summary_by_status ShipSummaryCounter, container *Containe
 
 }
 
-func createPoint(container *Container, hostname string, cluster_name string) *client.Point {
+func createMetric(container *Container, hostname string, cluster_name string, timestamp time.Time) telegraf.Metric {
 	tags := map[string]string{
 		"id":           container.ID,
 		"service":      container.Name,
@@ -67,11 +91,13 @@ func createPoint(container *Container, hostname string, cluster_name string) *cl
 		parsedName := snaker.CamelToSnake(name)
 		fields[parsedName] = value
 	}
+	m, _ := metric.New("armada", tags, fields, timestamp)
 
-	return influx.GetInfluxClient().CreatePoint("armada", tags, fields)
+	return m
+
 }
 
-func createSummary(host_summary map[string]int16, hostname string, cluster_name string) *client.Point {
+func createSummary(host_summary map[string]int16, hostname string, cluster_name string, timestamp time.Time) telegraf.Metric {
 	tags := map[string]string{
 		"host":         hostname,
 		"cluster_name": cluster_name,
@@ -82,8 +108,9 @@ func createSummary(host_summary map[string]int16, hostname string, cluster_name 
 	for key, value := range host_summary {
 		fields[key] = value
 	}
+	m, _ := metric.New("armada_ship", tags, fields, timestamp)
 
-	return influx.GetInfluxClient().CreatePoint("armada_ship", tags, fields)
+	return m
 }
 
 func getHostname() string {
