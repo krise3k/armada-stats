@@ -5,7 +5,9 @@ armada_cluster_name: "default"
 #Overrides the system hostname
 #hostname: custom.hostname
 
-# Metrics are stored in influxdb
+# Send metrics to influxdb
+send_to_influx: true
+
 # Influxdb address is got from armada by service name
 influx_service_name: influxdb
 # Armada hosts to query for influxdb service
@@ -14,6 +16,16 @@ armada_cluster_with_influx:
 influx_database: "armada_metrics"
 influx_user: "armada_metrics"
 influx_password: ""
+
+# Send metrics to kafka
+send_to_kafka: false
+
+# URLs of kafka brokers
+#kafka_brokers:
+#  - "localhost:9092"
+
+kafka_topic: "metrics"
+kafka_max_retry: 3
 
 #How often stats are updated, in seconds
 stats_update_frequency: 60
