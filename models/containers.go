@@ -1,7 +1,7 @@
 package models
 
 import (
-	"github.com/Sirupsen/logrus"
+	"github.com/sirupsen/logrus"
 	"github.com/fsouza/go-dockerclient"
 	"github.com/krise3k/armada-stats/models/armada"
 	"github.com/krise3k/armada-stats/utils"
