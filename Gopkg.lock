@@ -123,8 +123,8 @@
     "internal/jsonmessage",
     "internal/term"
   ]
-  revision = "f3bdb27a96799b10006a884ef2fed89284466276"
-  version = "v1.3.1"
+  revision = "8842d40dbf5ee062d80f9dc429db31a0fe0cdc73"
+  version = "v1.2.2"
 
 [[projects]]
   name = "github.com/getsentry/raven-go"
@@ -263,6 +263,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "c8d0d4d634f2ad976996955a6aa35c29617703f9acd525f1c13068059ee9f9e5"
+  inputs-digest = "3f393cc5f9b7578181858dbf5c58da20f7b5e81935b95f17b5f2fecff6d34b6e"
   solver-name = "gps-cdcl"
   solver-version = 1
