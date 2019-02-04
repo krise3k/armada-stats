@@ -6,10 +6,10 @@ import (
 	"github.com/influxdata/telegraf/metric"
 	"github.com/krise3k/armada-stats/utils"
 	"github.com/krise3k/armada-stats/utils/influx"
+	"github.com/krise3k/armada-stats/utils/kafka"
 	"github.com/serenize/snaker"
 	"os"
 	"time"
-	"github.com/krise3k/armada-stats/utils/kafka"
 )
 
 type ShipSummaryCounter map[string]int16
@@ -73,6 +73,7 @@ func createMetric(container *Container, hostname string, cluster_name string, ti
 		"service":      container.Name,
 		"host":         hostname,
 		"cluster_name": cluster_name,
+		"owner":        container.Owner,
 	}
 
 	for key, value := range container.Tags {

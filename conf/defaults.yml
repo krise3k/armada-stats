@@ -33,3 +33,9 @@ stats_update_frequency: 60
 # Error logs can be sent to sentry
 # more info https://getsentry.com/
 sentry_url: ""
+
+
+ownership_mapping:
+
+
+default_owner: unknown

@@ -1,10 +1,10 @@
 package models
 
 import (
-	"github.com/sirupsen/logrus"
 	"github.com/fsouza/go-dockerclient"
 	"github.com/krise3k/armada-stats/models/armada"
 	"github.com/krise3k/armada-stats/utils"
+	"github.com/sirupsen/logrus"
 	"strings"
 	"sync"
 	"time"
@@ -17,6 +17,7 @@ type Container struct {
 	Status     armada.Status
 	StatusName string
 	Tags       map[string]string
+	Owner      string
 	Uptime     int64
 	Stats      struct {
 		CPUPercentage     float64

@@ -34,3 +34,16 @@
 # more info https://getsentry.com/
 #
 # sentry_url: ""
+
+# Ownership mapping as list of
+# - owner:
+#   pattern: regex pattern
+# not matched services are passed as owner defined in key default
+
+#ownership_mapping:
+#  - owner: gd
+#    pattern: gd_.*|.*_gd
+#  - owner: cpl
+#    pattern: cpl_.*|test_service|.*_cpl
+
+#  default: ops
