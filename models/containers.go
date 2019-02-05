@@ -1,10 +1,10 @@
 package models
 
 import (
-	"github.com/sirupsen/logrus"
 	"github.com/fsouza/go-dockerclient"
 	"github.com/krise3k/armada-stats/models/armada"
 	"github.com/krise3k/armada-stats/utils"
+	"github.com/sirupsen/logrus"
 	"strings"
 	"sync"
 )
@@ -35,6 +35,7 @@ func (containerList *Containers) Add(armadaContainers armada.ArmadaContainerList
 			Address:      armadaContainer.Address,
 			Tags:         armadaContainer.Tags,
 			Status:       armadaContainer.Status,
+			Owner:        GetOwner(armadaContainer.Name),
 		}
 
 		containerList.Mu.Lock()
